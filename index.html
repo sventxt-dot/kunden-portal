@@ -101,6 +101,13 @@
   }
   .archive-item:hover { background: var(--bg); }
   .archive-item.active { background: var(--primary-light); }
+  .archive-del-btn {
+    margin-left: auto; flex-shrink: 0; background: none; border: none;
+    cursor: pointer; font-size: .85rem; opacity: 0; padding: 2px 5px;
+    border-radius: 4px; transition: opacity .15s, background .15s; color: var(--muted);
+  }
+  .archive-item:hover .archive-del-btn { opacity: 1; }
+  .archive-del-btn:hover { background: #fee2e2; color: #dc2626; }
   .archive-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
   .archive-info strong { font-size: .82rem; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px; }
   .archive-info span { font-size: .72rem; color: var(--muted); }
@@ -254,10 +261,12 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
-  if (typeof pdfjsLib !== "undefined") {
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-  }
+  window.addEventListener("load", function() {
+    if (typeof pdfjsLib !== "undefined") {
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    }
+  });
 </script>
 </head>
 <body>
@@ -316,6 +325,12 @@
       </div>
       <div class="messages" id="messages"></div>
       <div class="input-area">
+        <div class="pdf-preview" id="pdf-preview" style="display:none; align-items:center; gap:8px; padding:6px 14px 0; font-size:.82rem; color:var(--muted);">
+          <span>📎</span>
+          <span id="pdf-name"></span>
+          <span id="pdf-size"></span>
+          <button onclick="removePdf()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:.9rem;" title="Entfernen">✕</button>
+        </div>
         <div class="input-row">
           <textarea id="msg-input" rows="1" placeholder="Nachricht eingeben…"></textarea>
           <button class="send-btn" id="send-btn" onclick="sendMessage()">➤</button>
@@ -460,10 +475,37 @@ function renderArchive() {
       <div class="archive-info">
         <strong>${sess.title}</strong>
         <span>${agent?.icon || ""} ${agent?.name || "Unbekannt"} · ${date}</span>
-      </div>`;
+      </div>
+      <button class="archive-del-btn" title="Chat löschen" onclick="event.stopPropagation();deleteSession('${sess.id}')">🗑</button>` ;
     btn.onclick = () => loadSession(sess.id);
     list.appendChild(btn);
   });
+}
+
+function deleteSession(sessionId) {
+  if (!confirm("Chat wirklich löschen?")) return;
+  const sess = state.sessions[sessionId];
+  if (sess) {
+    const agent = CONFIG.agents.find(a => a.id === sess.agentId);
+    if (agent) {
+      const headers = {};
+      if (CONFIG.flowiseApiKey) headers["Authorization"] = "Bearer " + CONFIG.flowiseApiKey;
+      fetch(
+        agent.flowiseUrl.replace("/api/v1/prediction/", "/api/v1/chatmessage/") +
+        agent.chatflowId + "?chatId=" + encodeURIComponent(sessionId) + "&chatType=INTERNAL",
+        { method: "DELETE", headers }
+      ).catch(() => {});
+    }
+  }
+  delete state.sessions[sessionId];
+  if (state.activeSessionId === sessionId) {
+    state.activeSessionId = null;
+    document.getElementById("messages").innerHTML = "";
+    document.getElementById("chat-view").style.display = "none";
+    document.getElementById("welcome-state").style.display = "";
+  }
+  saveToStorage();
+  renderArchive();
 }
 
 function loadSession(sessionId) {
@@ -543,6 +585,78 @@ function appendTyping() {
 function removeTyping() {
   const el = document.getElementById("typing-indicator");
   if (el) el.remove();
+}
+
+async function handlePdf(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.type !== "application/pdf") { alert("Bitte nur PDF-Dateien."); return; }
+  if (file.size > 20 * 1024 * 1024) { alert("PDF zu groß (max. 20 MB)."); return; }
+
+  const preview = document.getElementById("pdf-preview");
+  const nameEl  = document.getElementById("pdf-name");
+  const sizeEl  = document.getElementById("pdf-size");
+  if (preview) { preview.style.display = "flex"; }
+  if (nameEl)  { nameEl.textContent = "⏳ Lese PDF…"; }
+  if (sizeEl)  { sizeEl.textContent = ""; }
+
+  try {
+    if (typeof pdfjsLib === "undefined") throw new Error("PDF.js nicht geladen.");
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let fullText = "";
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+
+      // Seitentext
+      const tc = await page.getTextContent();
+      const pageText = tc.items.map(s => s.str).join(" ").trim();
+      if (pageText) fullText += "--- Seite " + i + " ---\n" + pageText + "\n\n";
+
+      // Annotationen: Kommentare, Notizen, Markierungen
+      const annotations = await page.getAnnotations();
+      const notes = annotations.filter(a =>
+        ["Text","FreeText","Highlight","Underline","StrikeOut","Squiggly","Popup","Widget","Ink"].includes(a.subtype)
+      );
+      if (notes.length > 0) {
+        fullText += "[Annotationen Seite " + i + "]\n";
+        notes.forEach(a => {
+          if (a.contents)       fullText += "  📝 " + a.contents + "\n";
+          if (a.alternativeText && a.alternativeText !== a.contents)
+                                fullText += "  💬 " + a.alternativeText + "\n";
+          if (a.fieldValue)     fullText += "  📋 " + a.fieldValue + "\n";
+        });
+        fullText += "\n";
+      }
+    }
+
+    fullText = fullText.trim();
+    if (!fullText) throw new Error("Kein lesbarer Text im PDF gefunden.");
+
+    state.pendingPdf = { name: file.name, size: fmtSize(file.size), text: fullText };
+    if (nameEl) nameEl.textContent = file.name;
+    if (sizeEl) sizeEl.textContent = fmtSize(file.size) + " · " + pdf.numPages + " Seite(n)";
+  } catch(err) {
+    alert("PDF konnte nicht gelesen werden: " + err.message);
+    state.pendingPdf = null;
+    if (preview) preview.style.display = "none";
+  }
+  input.value = "";
+}
+
+function removePdf() {
+  state.pendingPdf = null;
+  const preview = document.getElementById("pdf-preview");
+  if (preview) preview.style.display = "none";
+  const inp = document.getElementById("pdf-input");
+  if (inp) inp.value = "";
+}
+
+function fmtSize(b) {
+  if (b < 1024) return b + " B";
+  if (b < 1048576) return (b/1024).toFixed(1) + " KB";
+  return (b/1048576).toFixed(1) + " MB";
 }
 
 function scrollToBottom() {
