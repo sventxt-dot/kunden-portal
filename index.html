@@ -614,6 +614,13 @@ async function handlePdf(input) {
   try {
     if (typeof pdfjsLib === "undefined") throw new Error("PDF.js nicht geladen.");
     const arrayBuffer = await file.arrayBuffer();
+    // Base64 DataURL für Flowise uploads-Array
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     let fullText = "";
 
@@ -645,7 +652,7 @@ async function handlePdf(input) {
     fullText = fullText.trim();
     if (!fullText) throw new Error("Kein lesbarer Text im PDF gefunden.");
 
-    state.pendingPdf = { name: file.name, size: fmtSize(file.size), text: fullText };
+    state.pendingPdf = { name: file.name, size: fmtSize(file.size), text: fullText, dataUrl: dataUrl };
     if (nameEl) nameEl.textContent = file.name;
     if (sizeEl) sizeEl.textContent = fmtSize(file.size) + " · " + pdf.numPages + " Seite(n)";
   } catch(err) {
@@ -691,8 +698,21 @@ async function sendMessage() {
   if (state.pendingPdf) {
     pdfLabel = " 📎 " + state.pendingPdf.name;
     question = text + "\n\n[PDF-Anhang: " + state.pendingPdf.name + "]\n\n" + state.pendingPdf.text;
+    // Flowise uploads-Array (file:full) aufbauen
+    if (state.pendingPdf.dataUrl) {
+      state._pendingUploads = [{
+        type: "file:full",
+        name: state.pendingPdf.name,
+        mime: "application/pdf",
+        data: state.pendingPdf.dataUrl
+      }];
+    } else {
+      state._pendingUploads = [];
+    }
     state.pendingPdf = null;
     removePdf();
+  } else {
+    state._pendingUploads = [];
   }
 
   // Session anlegen falls noch keine existiert
@@ -726,7 +746,12 @@ async function sendMessage() {
     // sessionId IMMER mitsenden — Flowise braucht sie für Buffer Memory
     const res = await fetch(agent.flowiseUrl + agent.chatflowId, {
       method: "POST", headers,
-      body: JSON.stringify({ question: question, sessionId: state.activeSessionId })
+      body: JSON.stringify(Object.assign(
+          { question: question, sessionId: state.activeSessionId },
+          state._pendingUploads && state._pendingUploads.length > 0
+            ? { uploads: state._pendingUploads }
+            : {}
+        ))
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
