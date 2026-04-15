@@ -584,12 +584,15 @@ function scrollToBottom() {
     return (b/1048576).toFixed(1) + " MB";
   }
 
-async function sendMessage() {
+async function sendMessage(overrideText) {
   const input = document.getElementById("msg-input");
-  const text = input.value.trim();
-  if (!text || state.isLoading || !state.activeAgent) return;
-  input.value = "";
-  input.style.height = "auto";
+  const text = overrideText !== undefined ? overrideText : input.value.trim();
+  // Senden erlaubt wenn: Text vorhanden ODER PDF angehängt
+  if ((!text && !state.pendingPdf) || state.isLoading || !state.activeAgent) return;
+  if (overrideText === undefined) {
+    input.value = "";
+    input.style.height = "auto";
+  }
   state.isLoading = true;
   document.getElementById("send-btn").disabled = true;
   const ts = Date.now();
@@ -599,16 +602,17 @@ async function sendMessage() {
     state.activeSessionId = sessionId;
     state.sessions[sessionId] = {
       id: sessionId, agentId: state.activeAgent.id,
-      title: text.slice(0, 40) + (text.length > 40 ? "…" : ""),
+      title: (text || (state.pendingPdf ? state.pendingPdf.name : "Chat")).slice(0, 40),
       messages: [], createdAt: ts, updatedAt: ts
     };
     document.getElementById("messages").innerHTML = "";
   }
 
-  const userMsg = { role: "user", content: text, ts };
+  const displayText = text || (state.pendingPdf ? "📎 " + state.pendingPdf.name : "");
+  const userMsg = { role: "user", content: displayText, ts };
   state.sessions[state.activeSessionId].messages.push(userMsg);
   state.sessions[state.activeSessionId].updatedAt = ts;
-  appendMessage("user", text, ts);
+  appendMessage("user", displayText, ts);
   saveToStorage();
   renderArchive();
   appendTyping();
@@ -621,7 +625,7 @@ async function sendMessage() {
     if (state.pendingPdf) {
       // PDF via multipart/form-data senden — genau wie der native Flowise-Chatbot
       const formData = new FormData();
-      formData.append("question", text);
+      formData.append("question", text || "Bitte analysiere das angehängte PDF.");
       formData.append("chatId", state.activeSessionId);
       // PDF als Blob anhängen
       const pdfBlob = new Blob([state.pendingPdf.arrayBuffer], { type: "application/pdf" });
