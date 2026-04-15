@@ -101,14 +101,6 @@
   }
   .archive-item:hover { background: var(--bg); }
   .archive-item.active { background: var(--primary-light); }
-  .archive-del-btn {
-    margin-left: auto; flex-shrink: 0; background: none; border: none;
-    cursor: pointer; font-size: .85rem; opacity: 0; padding: 2px 4px;
-    border-radius: 4px; transition: opacity .15s, background .15s;
-    color: var(--muted);
-  }
-  .archive-item:hover .archive-del-btn { opacity: 1; }
-  .archive-del-btn:hover { background: #fee2e2; color: #dc2626; }
   .archive-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
   .archive-info strong { font-size: .82rem; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px; }
   .archive-info span { font-size: .72rem; color: var(--muted); }
@@ -167,10 +159,62 @@
   .msg.bot  .msg-avatar { background: var(--bot-bg); }
   .msg-bubble {
     padding: 11px 15px; border-radius: 16px;
-    font-size: .9rem; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+    font-size: .9rem; line-height: 1.6; word-break: break-word;
   }
-  .msg.user .msg-bubble { background: var(--user-bg); color: #fff; border-bottom-right-radius: 4px; }
+  .msg.user .msg-bubble { background: var(--user-bg); color: #fff; border-bottom-right-radius: 4px; white-space: pre-wrap; }
   .msg.bot  .msg-bubble { background: var(--bot-bg); color: var(--text); border-bottom-left-radius: 4px; }
+
+  /* Markdown-Elemente in Bot-Nachrichten */
+  .msg.bot .msg-bubble h1,
+  .msg.bot .msg-bubble h2,
+  .msg.bot .msg-bubble h3 {
+    font-size: 1rem; font-weight: 700; margin: 12px 0 4px;
+    color: var(--primary); border-bottom: 1px solid var(--border); padding-bottom: 3px;
+  }
+  .msg.bot .msg-bubble h1 { font-size: 1.05rem; }
+  .msg.bot .msg-bubble h2 { font-size: .98rem; }
+  .msg.bot .msg-bubble h3 { font-size: .93rem; border-bottom: none; }
+  .msg.bot .msg-bubble p { margin: 6px 0; }
+  .msg.bot .msg-bubble ul,
+  .msg.bot .msg-bubble ol { margin: 6px 0 6px 18px; }
+  .msg.bot .msg-bubble li { margin: 3px 0; }
+  .msg.bot .msg-bubble strong { font-weight: 700; color: var(--text); }
+  .msg.bot .msg-bubble em { font-style: italic; color: var(--muted); }
+  .msg.bot .msg-bubble code {
+    background: #e8eaed; border-radius: 4px;
+    padding: 1px 5px; font-family: monospace; font-size: .85rem;
+  }
+  .msg.bot .msg-bubble pre {
+    background: #1e1e2e; color: #cdd6f4; border-radius: 8px;
+    padding: 12px; overflow-x: auto; margin: 8px 0; font-size: .82rem;
+  }
+  .msg.bot .msg-bubble pre code { background: none; padding: 0; color: inherit; }
+  .msg.bot .msg-bubble blockquote {
+    border-left: 3px solid var(--primary); margin: 8px 0;
+    padding: 4px 12px; color: var(--muted); font-style: italic;
+  }
+  .msg.bot .msg-bubble hr {
+    border: none; border-top: 1px solid var(--border); margin: 10px 0;
+  }
+  /* Tabellen */
+  .msg.bot .msg-bubble table {
+    border-collapse: collapse; width: 100%; margin: 10px 0;
+    font-size: .82rem; border-radius: 8px; overflow: hidden;
+  }
+  .msg.bot .msg-bubble th {
+    background: var(--primary); color: #fff;
+    padding: 7px 10px; text-align: left; font-weight: 600;
+  }
+  .msg.bot .msg-bubble td {
+    padding: 6px 10px; border-bottom: 1px solid var(--border);
+  }
+  .msg.bot .msg-bubble tr:last-child td { border-bottom: none; }
+  .msg.bot .msg-bubble tr:nth-child(even) td { background: #f9fafb; }
+  /* Links */
+  .msg.bot .msg-bubble a {
+    color: var(--primary); text-decoration: underline;
+  }
+  .msg.bot .msg-bubble a:hover { color: var(--primary-h); }
   .msg-time { font-size: .7rem; color: var(--muted); margin-top: 4px; }
   .msg.user .msg-time { text-align: right; }
 
@@ -207,12 +251,12 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
 </style>
-<!-- PDF.js für clientseitige Text-Extraktion -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
-  if (typeof pdfjsLib !== 'undefined') {
+  if (typeof pdfjsLib !== "undefined") {
     pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
   }
 </script>
 </head>
@@ -272,18 +316,11 @@
       </div>
       <div class="messages" id="messages"></div>
       <div class="input-area">
-        <div class="pdf-preview" id="pdf-preview">
-          <span class="pdf-preview-name" id="pdf-name"></span>
-          <span class="pdf-preview-size" id="pdf-size"></span>
-          <button class="pdf-remove" onclick="removePdf()" title="Entfernen">✕</button>
-        </div>
         <div class="input-row">
-          <input type="file" id="pdf-input" accept="application/pdf" style="display:none" onchange="handlePdf(this)">
-          <button class="pdf-btn" id="pdf-btn" onclick="document.getElementById('pdf-input').click()" title="PDF anhängen">📎</button>
           <textarea id="msg-input" rows="1" placeholder="Nachricht eingeben…"></textarea>
           <button class="send-btn" id="send-btn" onclick="sendMessage()">➤</button>
         </div>
-        <div class="input-hint">Enter zum Senden · Shift+Enter neue Zeile · 📎 PDF anhängen</div>
+        <div class="input-hint">Enter zum Senden · Shift+Enter für neue Zeile</div>
       </div>
     </div>
   </main>
@@ -423,38 +460,10 @@ function renderArchive() {
       <div class="archive-info">
         <strong>${sess.title}</strong>
         <span>${agent?.icon || ""} ${agent?.name || "Unbekannt"} · ${date}</span>
-      </div>
-      <button class="archive-del-btn" title="Chat löschen" onclick="event.stopPropagation(); deleteSession('${sess.id}')">🗑</button>`;
+      </div>`;
     btn.onclick = () => loadSession(sess.id);
     list.appendChild(btn);
   });
-}
-
-function deleteSession(sessionId) {
-  if (!confirm("Chat wirklich löschen?")) return;
-  // Flowise: Chat-Nachrichten serverseitig löschen
-  const sess = state.sessions[sessionId];
-  if (sess) {
-    const agent = CONFIG.agents.find(a => a.id === sess.agentId);
-    if (agent) {
-      const headers = {};
-      if (CONFIG.flowiseApiKey) headers["Authorization"] = "Bearer " + CONFIG.flowiseApiKey;
-      fetch(agent.flowiseUrl.replace("/api/v1/prediction/", "/api/v1/chatmessage/") + agent.chatflowId
-        + "?chatId=" + encodeURIComponent(sessionId) + "&chatType=INTERNAL",
-        { method: "DELETE", headers }
-      ).catch(() => {}); // Fehler ignorieren — lokal trotzdem löschen
-    }
-  }
-  delete state.sessions[sessionId];
-  if (state.activeSessionId === sessionId) {
-    state.activeSessionId = null;
-    state.activeAgent = null;
-    document.getElementById("messages").innerHTML = "";
-    document.getElementById("chat-view").style.display = "none";
-    document.getElementById("welcome-state").style.display = "";
-  }
-  saveToStorage();
-  renderArchive();
 }
 
 function loadSession(sessionId) {
@@ -496,7 +505,12 @@ function appendMessage(role, content, ts) {
   const inner = document.createElement("div");
   const bubble = document.createElement("div");
   bubble.className = "msg-bubble";
-  bubble.textContent = content;
+  if (role === "bot" && typeof marked !== "undefined") {
+    bubble.innerHTML = marked.parse(content, { breaks: true, gfm: true });
+    bubble.querySelectorAll("a").forEach(a => { a.target = "_blank"; a.rel = "noopener noreferrer"; });
+  } else {
+    bubble.textContent = content;
+  }
   const time = document.createElement("div");
   time.className = "msg-time";
   time.textContent = new Date(ts).toLocaleTimeString("de-DE", { hour:"2-digit", minute:"2-digit" });
@@ -536,54 +550,6 @@ function scrollToBottom() {
   c.scrollTop = c.scrollHeight;
 }
 
-
-  async function handlePdf(input) {
-    const file = input.files[0];
-    if (!file) return;
-    if (file.type !== "application/pdf") { alert("Bitte nur PDF-Dateien."); return; }
-    if (file.size > 20 * 1024 * 1024) { alert("PDF zu groß (max. 20 MB)."); return; }
-
-    document.getElementById("pdf-name").textContent = "⏳ Lese PDF…";
-    document.getElementById("pdf-size").textContent = "";
-    document.getElementById("pdf-preview").classList.add("visible");
-    document.getElementById("pdf-btn").classList.add("has-file");
-
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      let fullText = "";
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const tc = await page.getTextContent();
-        fullText += tc.items.map(s => s.str).join(" ") + "\n";
-      }
-      fullText = fullText.trim();
-      if (!fullText) throw new Error("Kein Text im PDF gefunden.");
-      state.pendingPdf = { name: file.name, size: fmtSize(file.size), text: fullText };
-      document.getElementById("pdf-name").textContent = file.name;
-      document.getElementById("pdf-size").textContent = fmtSize(file.size) + " · " + pdf.numPages + " Seite(n)";
-    } catch(err) {
-      alert("PDF konnte nicht gelesen werden: " + err.message);
-      state.pendingPdf = null;
-      document.getElementById("pdf-preview").classList.remove("visible");
-      document.getElementById("pdf-btn").classList.remove("has-file");
-    }
-    input.value = "";
-  }
-
-  function removePdf() {
-    state.pendingPdf = null;
-    document.getElementById("pdf-preview").classList.remove("visible");
-    document.getElementById("pdf-btn").classList.remove("has-file");
-    document.getElementById("pdf-input").value = "";
-  }
-
-  function fmtSize(b) {
-    if (b < 1024) return b + " B";
-    if (b < 1048576) return (b/1024).toFixed(1) + " KB";
-    return (b/1048576).toFixed(1) + " MB";
-  }
-
 async function sendMessage() {
   const input = document.getElementById("msg-input");
   const text = input.value.trim();
@@ -594,21 +560,35 @@ async function sendMessage() {
   document.getElementById("send-btn").disabled = true;
   const ts = Date.now();
 
+  // PDF als Text anhängen — VOR sessionId-Erstellung damit Titel stimmt
+  let question = text;
+  let pdfLabel = "";
+  if (state.pendingPdf) {
+    pdfLabel = " 📎 " + state.pendingPdf.name;
+    question = text + "\n\n[PDF-Anhang: " + state.pendingPdf.name + "]\n\n" + state.pendingPdf.text;
+    state.pendingPdf = null;
+    removePdf();
+  }
+
+  // Session anlegen falls noch keine existiert
   if (!state.activeSessionId) {
     const sessionId = "sess_" + ts + "_" + Math.random().toString(36).slice(2,7);
     state.activeSessionId = sessionId;
+    const titleRaw = text + pdfLabel;
     state.sessions[sessionId] = {
       id: sessionId, agentId: state.activeAgent.id,
-      title: text.slice(0, 40) + (text.length > 40 ? "…" : ""),
+      title: titleRaw.slice(0, 40) + (titleRaw.length > 40 ? "…" : ""),
       messages: [], createdAt: ts, updatedAt: ts
     };
     document.getElementById("messages").innerHTML = "";
   }
 
-  const userMsg = { role: "user", content: text, ts };
+  // Im Chat nur Nutzertext + PDF-Label anzeigen (nicht den riesigen PDF-Block)
+  const displayText = text + pdfLabel;
+  const userMsg = { role: "user", content: displayText, ts };
   state.sessions[state.activeSessionId].messages.push(userMsg);
   state.sessions[state.activeSessionId].updatedAt = ts;
-  appendMessage("user", text, ts);
+  appendMessage("user", displayText, ts);
   saveToStorage();
   renderArchive();
   appendTyping();
@@ -618,13 +598,7 @@ async function sendMessage() {
     const sess = state.sessions[state.activeSessionId];
     const headers = { "Content-Type": "application/json" };
     if (CONFIG.flowiseApiKey) headers["Authorization"] = "Bearer " + CONFIG.flowiseApiKey;
-    // PDF als Text anhängen (kein Base64 → kein Token-Overflow)
-    let question = text;
-    if (state.pendingPdf) {
-      question = text + "\n\n[PDF-Anhang: " + state.pendingPdf.name + "]\n\n" + state.pendingPdf.text;
-      state.pendingPdf = null;
-      removePdf();
-    }
+    // sessionId IMMER mitsenden — Flowise braucht sie für Buffer Memory
     const res = await fetch(agent.flowiseUrl + agent.chatflowId, {
       method: "POST", headers,
       body: JSON.stringify({ question: question, sessionId: state.activeSessionId })
