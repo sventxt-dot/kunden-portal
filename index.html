@@ -104,6 +104,53 @@
   .archive-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
   .archive-info strong { font-size: .82rem; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px; }
   .archive-info span { font-size: .72rem; color: var(--muted); }
+
+  .upload-btn {
+    background: none; border: 1.5px solid var(--border); border-radius: 10px;
+    padding: 0 12px; cursor: pointer; font-size: 1.1rem; color: var(--muted);
+    transition: border-color .2s, color .2s; flex-shrink: 0; height: 42px;
+  }
+  .upload-btn:hover { border-color: var(--primary); color: var(--primary); }
+  .pdf-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #f5eaec; border: 1px solid #d4a0a8; border-radius: 8px;
+    padding: 4px 10px; font-size: .78rem; color: #7a3040; margin: 4px 0 2px 0;
+  }
+  .pdf-badge button {
+    background: none; border: none; cursor: pointer; color: #7a3040;
+    font-size: .9rem; padding: 0; line-height: 1;
+  }
+  .input-hint { font-size: .72rem; color: var(--muted); padding: 2px 4px; }
+
+  .archive-item { position: relative; }
+  .archive-item .del-btn {
+    display: none; position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer; font-size: .85rem;
+    color: var(--muted); padding: 4px 6px; border-radius: 6px; line-height: 1;
+  }
+  .archive-item:hover .del-btn { display: block; }
+  .archive-item .del-btn:hover { background: #fde8e8; color: #dc2626; }
+
+  /* Confirm Dialog */
+  #confirm-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45);
+    z-index: 1000; align-items: center; justify-content: center;
+  }
+  #confirm-overlay.active { display: flex; }
+  #confirm-box {
+    background: #fff; border-radius: 16px; padding: 28px 32px; max-width: 340px;
+    width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,.18); text-align: center;
+  }
+  #confirm-box h3 { margin: 0 0 8px; font-size: 1rem; color: var(--text); }
+  #confirm-box p { margin: 0 0 20px; font-size: .85rem; color: var(--muted); }
+  .confirm-btns { display: flex; gap: 10px; justify-content: center; }
+  .confirm-btns button {
+    padding: 9px 22px; border-radius: 10px; border: none; cursor: pointer;
+    font-size: .9rem; font-weight: 600;
+  }
+  .btn-cancel { background: var(--bg); color: var(--text); border: 1.5px solid var(--border) !important; }
+  .btn-delete { background: #dc2626; color: #fff; }
+  .btn-delete:hover { background: #b91c1c; }
   .archive-empty { font-size: .82rem; color: var(--muted); padding: 12px 20px; }
 
   .sidebar-footer {
@@ -296,7 +343,8 @@ const CONFIG = {
 
 let state = {
   user: null, activeAgent: null,
-  activeSessionId: null, sessions: {}, isLoading: false
+  activeSessionId: null, sessions: {}, isLoading: false,
+  pendingPdf: null
 };
 
 function saveToStorage() {
@@ -305,6 +353,54 @@ function saveToStorage() {
 function loadFromStorage(user) {
   const raw = localStorage.getItem("mc_sessions_" + user);
   return raw ? JSON.parse(raw) : {};
+}
+
+
+function handlePdfSelect(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    state.pendingPdf = { name: file.name, data: e.target.result, mime: "application/pdf" };
+    const wrap = document.getElementById("pdf-badge-wrap");
+    wrap.innerHTML = `<div class="pdf-badge">📄 ${file.name} <button onclick="clearPdf()">✕</button></div>`;
+  };
+  reader.readAsDataURL(file);
+  event.target.value = "";
+}
+
+function clearPdf() {
+  state.pendingPdf = null;
+  document.getElementById("pdf-badge-wrap").innerHTML = "";
+}
+
+
+let _pendingDeleteId = null;
+
+function openConfirm(sessionId) {
+  _pendingDeleteId = sessionId;
+  document.getElementById("confirm-overlay").classList.add("active");
+}
+
+function closeConfirm() {
+  _pendingDeleteId = null;
+  document.getElementById("confirm-overlay").classList.remove("active");
+}
+
+function confirmDelete() {
+  if (!_pendingDeleteId) return;
+  const id = _pendingDeleteId;
+  closeConfirm();
+  delete state.sessions[id];
+  saveToStorage();
+  if (state.activeSessionId === id) {
+    state.activeSessionId = null;
+    document.getElementById("messages").innerHTML = "";
+    if (state.activeAgent) {
+      appendMessage("bot", "Hallo! Ich bin der " + state.activeAgent.name + " von Messerich Catering. Wie kann ich dir helfen?", Date.now());
+    }
+  }
+  renderArchive();
 }
 
 function doLogin() {
@@ -400,7 +496,8 @@ function renderArchive() {
       <div class="archive-info">
         <strong>${sess.title}</strong>
         <span>${agent?.icon || ""} ${agent?.name || "Unbekannt"} · ${date}</span>
-      </div>`;
+      </div>
+      <button class="del-btn" onclick="event.stopPropagation(); openConfirm('${sess.id}')" title="Chat löschen">🗑️</button>`;
     btn.onclick = () => loadSession(sess.id);
     list.appendChild(btn);
   });
@@ -519,9 +616,22 @@ async function sendMessage() {
     const sess = state.sessions[state.activeSessionId];
     const headers = { "Content-Type": "application/json" };
     if (CONFIG.flowiseApiKey) headers["Authorization"] = "Bearer " + CONFIG.flowiseApiKey;
+    let body;
+    if (state.pendingPdf) {
+      const uploads = [{
+        data: state.pendingPdf.data,
+        type: "file:full",
+        name: state.pendingPdf.name,
+        mime: state.pendingPdf.mime
+      }];
+      body = JSON.stringify({ question: text, sessionId: state.activeSessionId, uploads });
+      clearPdf();
+    } else {
+      body = JSON.stringify({ question: text, sessionId: state.activeSessionId });
+    }
     const res = await fetch(agent.flowiseUrl + agent.chatflowId, {
       method: "POST", headers,
-      body: JSON.stringify({ question: text, sessionId: state.activeSessionId })
+      body
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
@@ -553,5 +663,17 @@ document.getElementById("msg-input").addEventListener("keydown", function(e) {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 });
 </script>
+
+<!-- Delete Confirm Dialog -->
+<div id="confirm-overlay">
+  <div id="confirm-box">
+    <h3>Chat löschen?</h3>
+    <p>Dieser Chat wird unwiderruflich gelöscht.</p>
+    <div class="confirm-btns">
+      <button class="btn-cancel" onclick="closeConfirm()">Abbrechen</button>
+      <button class="btn-delete" onclick="confirmDelete()">Löschen</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
