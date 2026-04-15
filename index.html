@@ -252,6 +252,15 @@
   }
   .send-btn:hover { background: var(--primary-h); }
   .send-btn:disabled { background: var(--border); cursor: not-allowed; }
+  .pdf-btn {
+    width: 32px; height: 32px; background: none; border: none;
+    cursor: pointer; font-size: 1.1rem; display: flex; align-items: center;
+    justify-content: center; flex-shrink: 0; border-radius: 8px;
+    transition: background .15s; opacity: .6;
+  }
+  .pdf-btn:hover { background: var(--bg); opacity: 1; }
+  .pdf-btn.has-file { opacity: 1; color: var(--primary); }
+
   .input-hint { font-size: .72rem; color: var(--muted); margin-top: 6px; padding-left: 4px; }
 
   ::-webkit-scrollbar { width: 5px; }
@@ -332,10 +341,12 @@
           <button onclick="removePdf()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:.9rem;" title="Entfernen">✕</button>
         </div>
         <div class="input-row">
+          <input type="file" id="pdf-input" accept="application/pdf" style="display:none" onchange="handlePdf(this)">
+          <button class="pdf-btn" id="pdf-btn" onclick="document.getElementById('pdf-input').click()" title="PDF anhängen">📎</button>
           <textarea id="msg-input" rows="1" placeholder="Nachricht eingeben…"></textarea>
           <button class="send-btn" id="send-btn" onclick="sendMessage()">➤</button>
         </div>
-        <div class="input-hint">Enter zum Senden · Shift+Enter für neue Zeile</div>
+        <div class="input-hint">Enter zum Senden · Shift+Enter für neue Zeile · 📎 PDF anhängen</div>
       </div>
     </div>
   </main>
