@@ -101,6 +101,14 @@
   }
   .archive-item:hover { background: var(--bg); }
   .archive-item.active { background: var(--primary-light); }
+  .archive-del-btn {
+    margin-left: auto; flex-shrink: 0; background: none; border: none;
+    cursor: pointer; font-size: .85rem; opacity: 0; padding: 2px 4px;
+    border-radius: 4px; transition: opacity .15s, background .15s;
+    color: var(--muted);
+  }
+  .archive-item:hover .archive-del-btn { opacity: 1; }
+  .archive-del-btn:hover { background: #fee2e2; color: #dc2626; }
   .archive-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
   .archive-info strong { font-size: .82rem; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px; }
   .archive-info span { font-size: .72rem; color: var(--muted); }
@@ -199,6 +207,14 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
 </style>
+<!-- PDF.js für clientseitige Text-Extraktion -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  if (typeof pdfjsLib !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+</script>
 </head>
 <body>
 
@@ -407,10 +423,38 @@ function renderArchive() {
       <div class="archive-info">
         <strong>${sess.title}</strong>
         <span>${agent?.icon || ""} ${agent?.name || "Unbekannt"} · ${date}</span>
-      </div>`;
+      </div>
+      <button class="archive-del-btn" title="Chat löschen" onclick="event.stopPropagation(); deleteSession('${sess.id}')">🗑</button>`;
     btn.onclick = () => loadSession(sess.id);
     list.appendChild(btn);
   });
+}
+
+function deleteSession(sessionId) {
+  if (!confirm("Chat wirklich löschen?")) return;
+  // Flowise: Chat-Nachrichten serverseitig löschen
+  const sess = state.sessions[sessionId];
+  if (sess) {
+    const agent = CONFIG.agents.find(a => a.id === sess.agentId);
+    if (agent) {
+      const headers = {};
+      if (CONFIG.flowiseApiKey) headers["Authorization"] = "Bearer " + CONFIG.flowiseApiKey;
+      fetch(agent.flowiseUrl.replace("/api/v1/prediction/", "/api/v1/chatmessage/") + agent.chatflowId
+        + "?chatId=" + encodeURIComponent(sessionId) + "&chatType=INTERNAL",
+        { method: "DELETE", headers }
+      ).catch(() => {}); // Fehler ignorieren — lokal trotzdem löschen
+    }
+  }
+  delete state.sessions[sessionId];
+  if (state.activeSessionId === sessionId) {
+    state.activeSessionId = null;
+    state.activeAgent = null;
+    document.getElementById("messages").innerHTML = "";
+    document.getElementById("chat-view").style.display = "none";
+    document.getElementById("welcome-state").style.display = "";
+  }
+  saveToStorage();
+  renderArchive();
 }
 
 function loadSession(sessionId) {
@@ -493,21 +537,37 @@ function scrollToBottom() {
 }
 
 
-  function handlePdf(input) {
+  async function handlePdf(input) {
     const file = input.files[0];
     if (!file) return;
     if (file.type !== "application/pdf") { alert("Bitte nur PDF-Dateien."); return; }
     if (file.size > 20 * 1024 * 1024) { alert("PDF zu groß (max. 20 MB)."); return; }
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      const base64 = e.target.result.split(",")[1];
-      state.pendingPdf = { name: file.name, size: fmtSize(file.size), base64: base64 };
+
+    document.getElementById("pdf-name").textContent = "⏳ Lese PDF…";
+    document.getElementById("pdf-size").textContent = "";
+    document.getElementById("pdf-preview").classList.add("visible");
+    document.getElementById("pdf-btn").classList.add("has-file");
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let fullText = "";
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const tc = await page.getTextContent();
+        fullText += tc.items.map(s => s.str).join(" ") + "\n";
+      }
+      fullText = fullText.trim();
+      if (!fullText) throw new Error("Kein Text im PDF gefunden.");
+      state.pendingPdf = { name: file.name, size: fmtSize(file.size), text: fullText };
       document.getElementById("pdf-name").textContent = file.name;
-      document.getElementById("pdf-size").textContent = fmtSize(file.size);
-      document.getElementById("pdf-preview").classList.add("visible");
-      document.getElementById("pdf-btn").classList.add("has-file");
-    };
-    reader.readAsDataURL(file);
+      document.getElementById("pdf-size").textContent = fmtSize(file.size) + " · " + pdf.numPages + " Seite(n)";
+    } catch(err) {
+      alert("PDF konnte nicht gelesen werden: " + err.message);
+      state.pendingPdf = null;
+      document.getElementById("pdf-preview").classList.remove("visible");
+      document.getElementById("pdf-btn").classList.remove("has-file");
+    }
     input.value = "";
   }
 
@@ -527,65 +587,65 @@ function scrollToBottom() {
 async function sendMessage() {
   const input = document.getElementById("msg-input");
   const text = input.value.trim();
-  const pdf = state.pendingPdf;
-  if ((!text && !pdf) || state.isLoading || !state.activeAgent) return;
+  if (!text || state.isLoading || !state.activeAgent) return;
   input.value = "";
   input.style.height = "auto";
   state.isLoading = true;
   document.getElementById("send-btn").disabled = true;
   const ts = Date.now();
-  removePdf();
 
   if (!state.activeSessionId) {
     const sessionId = "sess_" + ts + "_" + Math.random().toString(36).slice(2,7);
     state.activeSessionId = sessionId;
-    const title = text ? text.slice(0, 40) + (text.length > 40 ? "…" : "") : (pdf ? "📄 " + pdf.name : "Neuer Chat");
     state.sessions[sessionId] = {
       id: sessionId, agentId: state.activeAgent.id,
-      title: title,
+      title: text.slice(0, 40) + (text.length > 40 ? "…" : ""),
       messages: [], createdAt: ts, updatedAt: ts
     };
     document.getElementById("messages").innerHTML = "";
   }
 
-  const displayText = text || "(PDF gesendet)";
-  const userMsg = { role: "user", content: displayText, ts, pdfName: pdf ? pdf.name : null };
+  const userMsg = { role: "user", content: text, ts };
   state.sessions[state.activeSessionId].messages.push(userMsg);
   state.sessions[state.activeSessionId].updatedAt = ts;
-  appendMessage("user", displayText, ts, pdf ? pdf.name : null);
+  appendMessage("user", text, ts);
   saveToStorage();
   renderArchive();
   appendTyping();
 
   try {
     const agent = state.activeAgent;
+    const sess = state.sessions[state.activeSessionId];
     const headers = { "Content-Type": "application/json" };
     if (CONFIG.flowiseApiKey) headers["Authorization"] = "Bearer " + CONFIG.flowiseApiKey;
-    const question = text || "Bitte lies und analysiere das angehängte PDF vollständig.";
-    const body = { question: question, sessionId: state.activeSessionId };
-    if (pdf) {
-      body.uploads = [{ data: "data:application/pdf;base64," + pdf.base64, type: "file:full", name: pdf.name, mime: "application/pdf" }];
+    // PDF als Text anhängen (kein Base64 → kein Token-Overflow)
+    let question = text;
+    if (state.pendingPdf) {
+      question = text + "\n\n[PDF-Anhang: " + state.pendingPdf.name + "]\n\n" + state.pendingPdf.text;
+      state.pendingPdf = null;
+      removePdf();
     }
     const res = await fetch(agent.flowiseUrl + agent.chatflowId, {
       method: "POST", headers,
-      body: JSON.stringify(body)
+      body: JSON.stringify({ question: question, sessionId: state.activeSessionId })
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
     const answer = data.text || data.answer || data.output || JSON.stringify(data);
     removeTyping();
     const botMsg = { role: "bot", content: answer, ts: Date.now() };
-    state.sessions[state.activeSessionId].messages.push(botMsg);
-    state.sessions[state.activeSessionId].updatedAt = botMsg.ts;
-    appendMessage("bot", answer, botMsg.ts, null);
+    sess.messages.push(botMsg);
+    sess.updatedAt = botMsg.ts;
+    appendMessage("bot", answer, botMsg.ts);
     saveToStorage();
-  } catch(err) {
+  } catch (err) {
     removeTyping();
-    const errMsg = { role: "bot", content: "Verbindungsfehler: " + err.message, ts: Date.now() };
+    const errMsg = { role: "bot", content: "⚠️ Verbindungsfehler zum Assistenten.\n\nDetails: " + err.message, ts: Date.now() };
     state.sessions[state.activeSessionId].messages.push(errMsg);
-    appendMessage("bot", errMsg.content, errMsg.ts, null);
+    appendMessage("bot", errMsg.content, errMsg.ts);
     saveToStorage();
   }
+
   state.isLoading = false;
   document.getElementById("send-btn").disabled = false;
   input.focus();
