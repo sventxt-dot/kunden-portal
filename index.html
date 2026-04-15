@@ -10,7 +10,6 @@
     --primary:   #8b2a3a;
     --primary-h: #6e2030;
     --primary-light: #f5eaec;
-    --accent:    #9a9a9a;
     --bg:        #f4f5f7;
     --surface:   #ffffff;
     --border:    #e2e4e9;
@@ -109,13 +108,6 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script>
-  if (typeof pdfjsLib !== 'undefined') {
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  }
-</script>
 </head>
 <body>
 
@@ -142,7 +134,7 @@
     </div>
     <div class="section-label">Agenten</div>
     <div id="agent-list"></div>
-    <div class="section-label" style="border-top: 1px solid var(--border); padding-top: 16px;">Chat-Archiv</div>
+    <div class="section-label" style="border-top:1px solid var(--border);padding-top:16px;">Chat-Archiv</div>
     <div class="archive-wrap">
       <div id="archive-list"><p class="archive-empty">Noch keine Chats.</p></div>
     </div>
@@ -158,8 +150,7 @@
       <h2>Willkommen!</h2>
       <p>Waehle links einen Assistenten aus, um einen neuen Chat zu starten.</p>
     </div>
-
-    <div id="chat-view" style="display:none; flex-direction:column; height:100%;">
+    <div id="chat-view" style="display:none;flex-direction:column;height:100%;">
       <div class="chat-header">
         <div class="chat-header-icon" id="header-icon"></div>
         <div class="chat-header-info">
@@ -198,7 +189,8 @@ const CONFIG = {
       icon: "🍽️",
       color: "#f5eaec",
       chatflowId: "26ade53e-ce20-40d7-a7bd-c1435d32a278",
-      flowiseUrl: "http://flowise-tvkk0ssj3mlrvabws2x0n8cp.178.104.67.188.sslip.io/api/v1/prediction/"
+      flowiseUrl: "http://flowise-tvkk0ssj3mlrvabws2x0n8cp.178.104.67.188.sslip.io/api/v1/prediction/",
+      attachmentUrl: "http://flowise-tvkk0ssj3mlrvabws2x0n8cp.178.104.67.188.sslip.io/api/v1/attachments/"
     },
     {
       id: "agent-operativ",
@@ -207,7 +199,8 @@ const CONFIG = {
       icon: "📋",
       color: "#eaf0f5",
       chatflowId: "0138059a-96d0-4462-9deb-c8c91ae22370",
-      flowiseUrl: "http://flowise-tvkk0ssj3mlrvabws2x0n8cp.178.104.67.188.sslip.io/api/v1/prediction/"
+      flowiseUrl: "http://flowise-tvkk0ssj3mlrvabws2x0n8cp.178.104.67.188.sslip.io/api/v1/prediction/",
+      attachmentUrl: "http://flowise-tvkk0ssj3mlrvabws2x0n8cp.178.104.67.188.sslip.io/api/v1/attachments/"
     }
   ],
   flowiseApiKey: ""
@@ -223,14 +216,14 @@ function saveToStorage() {
   localStorage.setItem("mc_sessions_" + state.user, JSON.stringify(state.sessions));
 }
 function loadFromStorage(user) {
-  const raw = localStorage.getItem("mc_sessions_" + user);
+  var raw = localStorage.getItem("mc_sessions_" + user);
   return raw ? JSON.parse(raw) : {};
 }
 
 function doLogin() {
-  const u = document.getElementById("login-user").value.trim();
-  const p = document.getElementById("login-pass").value;
-  const err = document.getElementById("login-error");
+  var u = document.getElementById("login-user").value.trim();
+  var p = document.getElementById("login-pass").value;
+  var err = document.getElementById("login-error");
   if (CONFIG.users[u] && CONFIG.users[u] === p) {
     err.style.display = "none";
     state.user = u;
@@ -251,20 +244,20 @@ function doLogout() {
   showScreen("login-screen");
 }
 
-document.getElementById("login-pass").addEventListener("keydown", e => {
+document.getElementById("login-pass").addEventListener("keydown", function(e) {
   if (e.key === "Enter") doLogin();
 });
 
 function showScreen(id) {
-  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.querySelectorAll(".screen").forEach(function(s){ s.classList.remove("active"); });
   document.getElementById(id).classList.add("active");
 }
 
 function renderAgents() {
-  const list = document.getElementById("agent-list");
+  var list = document.getElementById("agent-list");
   list.innerHTML = "";
-  CONFIG.agents.forEach(agent => {
-    const btn = document.createElement("button");
+  CONFIG.agents.forEach(function(agent) {
+    var btn = document.createElement("button");
     btn.className = "agent-btn" + (state.activeAgent && state.activeAgent.id === agent.id ? " active" : "");
     btn.innerHTML =
       '<div class="agent-icon" style="background:' + agent.color + '">' + agent.icon + '</div>' +
@@ -302,10 +295,7 @@ function newChat() {
 function renderArchive() {
   var list = document.getElementById("archive-list");
   var sessions = Object.values(state.sessions).sort(function(a,b){ return b.updatedAt - a.updatedAt; });
-  if (sessions.length === 0) {
-    list.innerHTML = '<p class="archive-empty">Noch keine Chats.</p>';
-    return;
-  }
+  if (sessions.length === 0) { list.innerHTML = '<p class="archive-empty">Noch keine Chats.</p>'; return; }
   list.innerHTML = "";
   sessions.forEach(function(sess) {
     var agent = CONFIG.agents.find(function(a){ return a.id === sess.agentId; });
@@ -313,7 +303,7 @@ function renderArchive() {
     btn.className = "archive-item" + (state.activeSessionId === sess.id ? " active" : "");
     var date = new Date(sess.updatedAt).toLocaleDateString("de-DE", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" });
     btn.innerHTML =
-      '<div class="archive-dot" style="background:' + (agent ? agent.color : '#ccc') + '; border:1px solid #ccc;"></div>' +
+      '<div class="archive-dot" style="background:' + (agent ? agent.color : '#ccc') + ';border:1px solid #ccc;"></div>' +
       '<div class="archive-info"><strong>' + sess.title + '</strong><span>' + (agent ? agent.icon + ' ' + agent.name : 'Unbekannt') + ' &middot; ' + date + '</span></div>' +
       '<button class="archive-del-btn" title="Chat loeschen" onclick="event.stopPropagation();deleteSession(\'' + sess.id + '\')">&#x1F5D1;</button>';
     btn.onclick = function() { loadSession(sess.id); };
@@ -364,8 +354,7 @@ function renderMessages() {
   var container = document.getElementById("messages");
   container.innerHTML = "";
   if (!state.activeSessionId) {
-    var agent = state.activeAgent;
-    appendMessage("bot", "Hallo! Ich bin der " + agent.name + " von Messerich Catering. " + agent.description + ". Wie kann ich dir helfen?", Date.now());
+    appendMessage("bot", "Hallo! Ich bin der " + state.activeAgent.name + " von Messerich Catering. " + state.activeAgent.description + ". Wie kann ich dir helfen?", Date.now());
     return;
   }
   var sess = state.sessions[state.activeSessionId];
@@ -432,46 +421,22 @@ function fmtSize(b) {
   return (b/1048576).toFixed(1) + " MB";
 }
 
-// PDF HANDLER — File-Objekt speichern fuer multipart-Upload
-async function handlePdf(input) {
+function handlePdf(input) {
   var file = input.files[0];
   if (!file) return;
   if (file.type !== "application/pdf") { alert("Bitte nur PDF-Dateien."); return; }
   if (file.size > 20 * 1024 * 1024) { alert("PDF zu gross (max. 20 MB)."); return; }
 
-  document.getElementById("pdf-name").textContent = "Lese PDF...";
-  document.getElementById("pdf-size").textContent = "";
+  state.pendingPdf = {
+    name: file.name,
+    size: fmtSize(file.size),
+    file: file
+  };
+
+  document.getElementById("pdf-name").textContent = file.name;
+  document.getElementById("pdf-size").textContent = fmtSize(file.size);
   document.getElementById("pdf-preview").classList.add("visible");
   document.getElementById("pdf-btn").classList.add("has-file");
-
-  try {
-    var arrayBuf = await file.arrayBuffer();
-    var pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise;
-    var fullText = "";
-    for (var i = 1; i <= pdf.numPages; i++) {
-      var page = await pdf.getPage(i);
-      var tc = await page.getTextContent();
-      fullText += tc.items.map(function(s){ return s.str; }).join(" ") + "\n";
-    }
-    fullText = fullText.trim();
-
-    // File-Objekt direkt speichern — wird als multipart/form-data gesendet
-    state.pendingPdf = {
-      name: file.name,
-      size: fmtSize(file.size),
-      pages: pdf.numPages,
-      text: fullText,
-      file: file
-    };
-
-    document.getElementById("pdf-name").textContent = file.name;
-    document.getElementById("pdf-size").textContent = fmtSize(file.size) + " - " + pdf.numPages + " Seite(n)";
-  } catch(err) {
-    alert("PDF konnte nicht gelesen werden: " + err.message);
-    state.pendingPdf = null;
-    document.getElementById("pdf-preview").classList.remove("visible");
-    document.getElementById("pdf-btn").classList.remove("has-file");
-  }
   input.value = "";
 }
 
@@ -483,8 +448,9 @@ function removePdf() {
 }
 
 // SEND MESSAGE
-// PDF: multipart/form-data mit Key "files" (Flowise Full File Upload)
-// Text: JSON
+// Flowise 2-Schritt Prozess fuer File Upload:
+// 1. POST /api/v1/attachments/{chatflowId}/{chatId}  -> multipart mit "files" + "chatId"
+// 2. POST /api/v1/prediction/{chatflowId}            -> JSON mit "question", "chatId", "uploads" (Response aus Schritt 1)
 async function sendMessage(overrideText) {
   var input = document.getElementById("msg-input");
   var text = overrideText !== undefined ? overrideText : input.value.trim();
@@ -526,48 +492,50 @@ async function sendMessage(overrideText) {
   try {
     var agent = state.activeAgent;
     var sess = state.sessions[state.activeSessionId];
-    var res;
+    var uploads = [];
 
     if (state.pendingPdf) {
-      // Flowise Full File Upload: multipart/form-data, Key "files"
-      var formData = new FormData();
-      formData.append("question", text || "Bitte analysiere das angehaengte PDF.");
-      formData.append("chatId", state.activeSessionId);
-      formData.append("files", state.pendingPdf.file, state.pendingPdf.name);
-
-      // State zuruecksetzen NACH dem Speichern der Referenz
+      // SCHRITT 1: Datei hochladen an /api/v1/attachments/{chatflowId}/{chatId}
       var savedFile = state.pendingPdf.file;
       var savedName = state.pendingPdf.name;
       state.pendingPdf = null;
       removePdf();
 
-      // Nochmal sicherheitshalber setzen (removePdf hat state.pendingPdf bereits null gesetzt)
-      formData = new FormData();
-      formData.append("question", text || "Bitte analysiere das angehaengte PDF.");
-      formData.append("chatId", state.activeSessionId);
+      var formData = new FormData();
       formData.append("files", savedFile, savedName);
+      formData.append("chatId", state.activeSessionId);
 
-      var headers = {};
-      if (CONFIG.flowiseApiKey) headers["Authorization"] = "Bearer " + CONFIG.flowiseApiKey;
-      // KEIN Content-Type setzen — Browser setzt multipart boundary automatisch
+      var uploadHeaders = {};
+      if (CONFIG.flowiseApiKey) uploadHeaders["Authorization"] = "Bearer " + CONFIG.flowiseApiKey;
 
-      res = await fetch(agent.flowiseUrl + agent.chatflowId, {
+      var uploadRes = await fetch(agent.attachmentUrl + agent.chatflowId + "/" + state.activeSessionId, {
         method: "POST",
-        headers: headers,
+        headers: uploadHeaders,
         body: formData
       });
 
-    } else {
-      // Normaler Text-Request als JSON
-      var headers2 = { "Content-Type": "application/json" };
-      if (CONFIG.flowiseApiKey) headers2["Authorization"] = "Bearer " + CONFIG.flowiseApiKey;
-
-      res = await fetch(agent.flowiseUrl + agent.chatflowId, {
-        method: "POST",
-        headers: headers2,
-        body: JSON.stringify({ question: text, chatId: state.activeSessionId })
-      });
+      if (!uploadRes.ok) throw new Error("Upload fehlgeschlagen: HTTP " + uploadRes.status);
+      uploads = await uploadRes.json();
+      // uploads ist ein Array: [{ name, mimeType, size, content }]
     }
+
+    // SCHRITT 2: Chat-Nachricht senden
+    var chatHeaders = { "Content-Type": "application/json" };
+    if (CONFIG.flowiseApiKey) chatHeaders["Authorization"] = "Bearer " + CONFIG.flowiseApiKey;
+
+    var body = {
+      question: text || "Bitte analysiere das angehaengte PDF.",
+      chatId: state.activeSessionId
+    };
+    if (uploads.length > 0) {
+      body.uploads = uploads;
+    }
+
+    var res = await fetch(agent.flowiseUrl + agent.chatflowId, {
+      method: "POST",
+      headers: chatHeaders,
+      body: JSON.stringify(body)
+    });
 
     if (!res.ok) throw new Error("HTTP " + res.status);
     var data = await res.json();
@@ -584,7 +552,7 @@ async function sendMessage(overrideText) {
     removeTyping();
     var errMsg = {
       role: "bot",
-      content: "Verbindungsfehler zum Assistenten.\n\nDetails: " + err.message,
+      content: "Verbindungsfehler: " + err.message,
       ts: Date.now()
     };
     state.sessions[state.activeSessionId].messages.push(errMsg);
@@ -601,7 +569,6 @@ document.getElementById("msg-input").addEventListener("input", function() {
   this.style.height = "auto";
   this.style.height = Math.min(this.scrollHeight, 120) + "px";
 });
-
 document.getElementById("msg-input").addEventListener("keydown", function(e) {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 });
