@@ -25,7 +25,7 @@
   .screen { display: none; height: 100vh; }
   .screen.active { display: flex; }
 
-  /* ── LOGIN ── */
+  /* LOGIN */
   #login-screen {
     align-items: center; justify-content: center;
     background: linear-gradient(135deg, #3a1020 0%, #8b2a3a 100%);
@@ -55,10 +55,10 @@
   .login-card button:hover { background: var(--primary-h); }
   .login-error { color: #dc2626; font-size: .85rem; text-align: center; display: none; }
 
-  /* ── APP ── */
+  /* APP */
   #app-screen { flex-direction: row; }
 
-  /* ── SIDEBAR ── */
+  /* SIDEBAR */
   .sidebar {
     width: 280px; min-width: 280px; background: var(--surface);
     border-right: 1px solid var(--border);
@@ -126,7 +126,7 @@
   }
   .logout-btn:hover { color: var(--primary); border-color: var(--primary); }
 
-  /* ── MAIN ── */
+  /* MAIN */
   .main { flex: 1; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
   .welcome-state {
@@ -565,23 +565,19 @@ function fmtSize(b) {
   return (b/1048576).toFixed(1) + " MB";
 }
 
-// ─────────────────────────────────────────────
-// PDF HANDLER — FIX: File-Objekt direkt speichern
-// Kein arrayBuffer-Umweg → kein "consumed" Problem
-// ─────────────────────────────────────────────
+// PDF HANDLER
 async function handlePdf(input) {
   const file = input.files[0];
   if (!file) return;
   if (file.type !== "application/pdf") { alert("Bitte nur PDF-Dateien."); return; }
-  if (file.size > 20 * 1024 * 1024) { alert("PDF zu groß (max. 20 MB)."); return; }
+  if (file.size > 20 * 1024 * 1024) { alert("PDF zu gross (max. 20 MB)."); return; }
 
-  document.getElementById("pdf-name").textContent = "⏳ Lese PDF…";
+  document.getElementById("pdf-name").textContent = "Lese PDF...";
   document.getElementById("pdf-size").textContent = "";
   document.getElementById("pdf-preview").classList.add("visible");
   document.getElementById("pdf-btn").classList.add("has-file");
 
   try {
-    // Für pdfjsLib: separaten ArrayBuffer lesen (eigene Kopie)
     const arrayBufferForPdfJs = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBufferForPdfJs }).promise;
     let fullText = "";
@@ -592,14 +588,13 @@ async function handlePdf(input) {
     }
     fullText = fullText.trim();
 
-    // ✅ FIX: Originales File-Objekt speichern — NICHT arrayBuffer
-    // File-Objekt ist immer lesbar, wird nie "consumed"
+    // File-Objekt direkt speichern fuer spaetere Base64-Konvertierung
     state.pendingPdf = {
       name: file.name,
       size: fmtSize(file.size),
       pages: pdf.numPages,
       text: fullText,
-      file: file   // <-- das originale File-Objekt für FormData
+      file: file
     };
 
     document.getElementById("pdf-name").textContent = file.name;
@@ -620,14 +615,11 @@ function removePdf() {
   document.getElementById("pdf-input").value = "";
 }
 
-// ─────────────────────────────────────────────
-// SEND MESSAGE — FIX: file direkt in FormData
-// ─────────────────────────────────────────────
+// SEND MESSAGE — PDF als Base64 im JSON-Body (Flowise uploads-Format)
 async function sendMessage(overrideText) {
   const input = document.getElementById("msg-input");
   const text = overrideText !== undefined ? overrideText : input.value.trim();
 
-  // Senden erlaubt wenn: Text vorhanden ODER PDF angehängt
   if ((!text && !state.pendingPdf) || state.isLoading || !state.activeAgent) return;
 
   if (overrideText === undefined) {
@@ -668,25 +660,43 @@ async function sendMessage(overrideText) {
     let res;
 
     if (state.pendingPdf) {
-      // ✅ FIX: File-Objekt direkt in FormData — kein Blob-Umweg, kein arrayBuffer
-      const formData = new FormData();
-      formData.append("question", text || "Bitte analysiere das angehängte PDF.");
-      formData.append("chatId", state.activeSessionId);
-      formData.append("files", state.pendingPdf.file, state.pendingPdf.name);
-
-      // PDF-State VOR dem fetch zurücksetzen
+      // ✅ FLOWISE-FORMAT: PDF als Base64-String im JSON-Body
+      // Flowise erwartet: { question, chatId, uploads: [{ data, type, name, mime }] }
+      const pdfFile = state.pendingPdf.file;
       const pdfName = state.pendingPdf.name;
+
+      // PDF-State zuruecksetzen
       state.pendingPdf = null;
       removePdf();
 
-      const headers = {};
+      // File als Base64 lesen (FileReader gibt "data:application/pdf;base64,...")
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(pdfFile);
+      });
+
+      const headers = { "Content-Type": "application/json" };
       if (CONFIG.flowiseApiKey) headers["Authorization"] = "Bearer " + CONFIG.flowiseApiKey;
 
       res = await fetch(agent.flowiseUrl + agent.chatflowId, {
         method: "POST",
         headers,
-        body: formData
+        body: JSON.stringify({
+          question: text || "Bitte analysiere das angehaengte PDF.",
+          chatId: state.activeSessionId,
+          uploads: [
+            {
+              data: base64,
+              type: "file",
+              name: pdfName,
+              mime: "application/pdf"
+            }
+          ]
+        })
       });
+
     } else {
       // Normaler Text-Request als JSON
       const headers = { "Content-Type": "application/json" };
@@ -714,7 +724,7 @@ async function sendMessage(overrideText) {
     removeTyping();
     const errMsg = {
       role: "bot",
-      content: "⚠️ Verbindungsfehler zum Assistenten.\n\nDetails: " + err.message,
+      content: "Verbindungsfehler zum Assistenten.\n\nDetails: " + err.message,
       ts: Date.now()
     };
     state.sessions[state.activeSessionId].messages.push(errMsg);
