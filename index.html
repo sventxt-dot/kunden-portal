@@ -325,7 +325,7 @@ const CONFIG = {
       icon: "🍽️",
       color: "#f5eaec",
       chatflowId: "26ade53e-ce20-40d7-a7bd-c1435d32a278",
-      flowiseUrl: "https://flowise-tvkk0ssj3mlrvabws2x0n8cp.178.104.67.188.sslip.io/api/v1/prediction/"
+      flowiseUrl: "http://flowise-tvkk0ssj3mlrvabws2x0n8cp.178.104.67.188.sslip.io/api/v1/prediction/"
     },
     {
       id: "agent-operativ",
@@ -334,7 +334,7 @@ const CONFIG = {
       icon: "📋",
       color: "#eaf0f5",
       chatflowId: "0138059a-96d0-4462-9deb-c8c91ae22370",
-      flowiseUrl: "https://flowise-tvkk0ssj3mlrvabws2x0n8cp.178.104.67.188.sslip.io/api/v1/prediction/"
+      flowiseUrl: "http://flowise-tvkk0ssj3mlrvabws2x0n8cp.178.104.67.188.sslip.io/api/v1/prediction/"
     }
   ],
   flowiseApiKey: ""
@@ -462,8 +462,7 @@ function deleteSession(sessionId) {
     if (agent) {
       const headers = {};
       if (CONFIG.flowiseApiKey) headers["Authorization"] = "Bearer " + CONFIG.flowiseApiKey;
-      fetch(agent.flowiseUrl.replace("/api/v1/prediction/", "/api/v1/chatmessage/")
-        + agent.chatflowId
+      fetch(agent.flowiseUrl.replace("/api/v1/prediction/", "/api/v1/chatmessage/") + agent.chatflowId
         + "?chatId=" + encodeURIComponent(sessionId) + "&chatType=INTERNAL",
         { method: "DELETE", headers }
       ).catch(() => {});
@@ -571,9 +570,9 @@ async function handlePdf(input) {
   const file = input.files[0];
   if (!file) return;
   if (file.type !== "application/pdf") { alert("Bitte nur PDF-Dateien."); return; }
-  if (file.size > 20 * 1024 * 1024) { alert("PDF zu groß (max. 20 MB)."); return; }
+  if (file.size > 20 * 1024 * 1024) { alert("PDF zu gross (max. 20 MB)."); return; }
 
-  document.getElementById("pdf-name").textContent = "⏳ Lese PDF…";
+  document.getElementById("pdf-name").textContent = "Lese PDF...";
   document.getElementById("pdf-size").textContent = "";
   document.getElementById("pdf-preview").classList.add("visible");
   document.getElementById("pdf-btn").classList.add("has-file");
@@ -589,12 +588,13 @@ async function handlePdf(input) {
     }
     fullText = fullText.trim();
 
+    // File-Objekt direkt speichern fuer spaetere Base64-Konvertierung
+    // ✅ Ansatz B: nur Text speichern, kein File-Objekt noetig
     state.pendingPdf = {
       name: file.name,
       size: fmtSize(file.size),
       pages: pdf.numPages,
-      text: fullText,
-      file: file
+      text: fullText
     };
 
     document.getElementById("pdf-name").textContent = file.name;
@@ -615,7 +615,8 @@ function removePdf() {
   document.getElementById("pdf-input").value = "";
 }
 
-// SEND MESSAGE
+// SEND MESSAGE — Ansatz B: PDF.js extrahiert Text clientseitig, direkt als uploads-Array
+// Kein /api/v1/attachments Aufruf → kein CORS-Problem
 async function sendMessage(overrideText) {
   const input = document.getElementById("msg-input");
   const text = overrideText !== undefined ? overrideText : input.value.trim();
@@ -659,33 +660,35 @@ async function sendMessage(overrideText) {
     const sess = state.sessions[state.activeSessionId];
     let res;
 
-    if (state.pendingPdf) {
-      const formData = new FormData();
-      formData.append("question", text || "Bitte analysiere das angehängte PDF.");
-      formData.append("chatId", state.activeSessionId);
-      formData.append("files", state.pendingPdf.file, state.pendingPdf.name);
+    // ✅ Ansatz B: uploads-Array direkt im prediction-Request
+    // Exakt das Format das Flowise erwartet (verifiziert per DevTools):
+    // { data: "<extrahierter Text>", mime: "application/pdf", name: "...", type: "file:full" }
+    const headers = { "Content-Type": "application/json" };
+    if (CONFIG.flowiseApiKey) headers["Authorization"] = "Bearer " + CONFIG.flowiseApiKey;
 
+    const payload = {
+      question: text || "Bitte analysiere das angehaengte PDF.",
+      chatId: state.activeSessionId,
+      overrideConfig: {},
+      streaming: false
+    };
+
+    if (state.pendingPdf) {
+      payload.uploads = [{
+        data: state.pendingPdf.text,
+        mime: "application/pdf",
+        name: state.pendingPdf.name,
+        type: "file:full"
+      }];
       state.pendingPdf = null;
       removePdf();
-
-      const headers = {};
-      if (CONFIG.flowiseApiKey) headers["Authorization"] = "Bearer " + CONFIG.flowiseApiKey;
-
-      res = await fetch(agent.flowiseUrl + agent.chatflowId, {
-        method: "POST",
-        headers,
-        body: formData
-      });
-    } else {
-      const headers = { "Content-Type": "application/json" };
-      if (CONFIG.flowiseApiKey) headers["Authorization"] = "Bearer " + CONFIG.flowiseApiKey;
-
-      res = await fetch(agent.flowiseUrl + agent.chatflowId, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ question: text, chatId: state.activeSessionId })
-      });
     }
+
+    res = await fetch(agent.flowiseUrl + agent.chatflowId, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload)
+    });
 
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
@@ -702,7 +705,7 @@ async function sendMessage(overrideText) {
     removeTyping();
     const errMsg = {
       role: "bot",
-      content: "⚠️ Verbindungsfehler zum Assistenten.\n\nDetails: " + err.message,
+      content: "Verbindungsfehler zum Assistenten.\n\nDetails: " + err.message,
       ts: Date.now()
     };
     state.sessions[state.activeSessionId].messages.push(errMsg);
