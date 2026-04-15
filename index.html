@@ -692,13 +692,12 @@ async function sendMessage() {
   document.getElementById("send-btn").disabled = true;
   const ts = Date.now();
 
-  // PDF als Text anhängen — VOR sessionId-Erstellung damit Titel stimmt
+  // PDF als uploads-Array an Flowise senden (NICHT als Text in question einbetten)
   let question = text;
   let pdfLabel = "";
   if (state.pendingPdf) {
     pdfLabel = " 📎 " + state.pendingPdf.name;
-    question = text + "\n\n[PDF-Anhang: " + state.pendingPdf.name + "]\n\n" + state.pendingPdf.text;
-    // Flowise uploads-Array (file:full) aufbauen
+    // question bleibt der reine Nutzertext — kein PDF-Text einbetten (→ HTTP 500 vermeiden)
     if (state.pendingPdf.dataUrl) {
       state._pendingUploads = [{
         type: "file:full",
