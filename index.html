@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Küchen-Assistent Portal</title>
+<style>
+  /* ── Reset & Base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:        #f4f5f7;
+    --surface:   #ffffff;
+    --border:    #e2e4e9;
+    --primary:   #2563eb;
+    --primary-h: #1d4ed8;
+    --text:      #1a1d23;
+    --muted:     #6b7280;
+    --user-bg:   #2563eb;
+    --bot-bg:    #f0f2f5;
+    --radius:    12px;
+    --shadow:    0 2px 12px rgba(0,0,0,.08);
+  }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; }
+
+  /* ── Screens ── */
+  .screen { display: none; height: 100vh; }
+  .screen.active { display: flex; }
+
+  /* ══════════════════════════════
+     LOGIN SCREEN
+  ══════════════════════════════ */
+  #login-screen {
+    align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
+  }
+  .login-card {
+    background: var(--surface); border-radius: 20px;
+    padding: 48px 40px; width: 360px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.25);
+    display: flex; flex-direction: column; gap: 24px;
+  }
+  .login-card h1 { font-size: 1.5rem; font-weight: 700; text-align: center; }
+  .login-card p  { font-size: .9rem; color: var(--muted); text-align: center; margin-top: -16px; }
+  .login-card input {
+    width: 100%; padding: 12px 16px; border: 1.5px solid var(--border);
+    border-radius: var(--radius); font-size: 1rem; outline: none;
+    transition: border-color .2s;
+  }
+  .login-card input:focus { border-color: var(--primary); }
+  .login-card button {
+    width: 100%; padding: 13px; background: var(--primary); color: #fff;
+    border: none; border-radius: var(--radius); font-size: 1rem;
+    font-weight: 600; cursor: pointer; transition: background .2s;
+  }
+  .login-card button:hover { background: var(--primary-h); }
+  .login-error { color: #dc2626; font-size: .85rem; text-align: center; display: none; }
+
+  /* ══════════════════════════════
+     MAIN APP
+  ══════════════════════════════ */
+  #app-screen { flex-direction: row; }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 280px; min-width: 280px; background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; height: 100vh;
+  }
+  .sidebar-header {
+    padding: 20px 20px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .sidebar-header h2 { font-size: 1rem; font-weight: 700; }
+  .sidebar-header span { font-size: .75rem; color: var(--muted); }
+
+  .agent-section { padding: 16px 12px 8px; }
+  .agent-section h3 { font-size: .7rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; padding: 0 8px 8px; }
+
+  .agent-btn {
+    width: 100%; display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px; border: none; background: none;
+    border-radius: 10px; cursor: pointer; text-align: left;
+    transition: background .15s; margin-bottom: 2px;
+  }
+  .agent-btn:hover { background: var(--bg); }
+  .agent-btn.active { background: #eff6ff; }
+  .agent-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.1rem; flex-shrink: 0;
+  }
+  .agent-info { flex: 1; min-width: 0; }
+  .agent-info strong { font-size: .88rem; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .agent-info span { font-size: .75rem; color: var(--muted); }
+
+  /* Archive section */
+  .archive-section { flex: 1; overflow-y: auto; padding: 8px 12px; border-top: 1px solid var(--border); margin-top: 8px; }
+  .archive-section h3 { font-size: .7rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; padding: 8px 8px 8px; }
+  .archive-item {
+    width: 100%; display: flex; align-items: flex-start; gap: 10px;
+    padding: 9px 10px; border: none; background: none;
+    border-radius: 8px; cursor: pointer; text-align: left;
+    transition: background .15s; margin-bottom: 1px;
+  }
+  .archive-item:hover { background: var(--bg); }
+  .archive-item.active { background: #eff6ff; }
+  .archive-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+  .archive-info strong { font-size: .82rem; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+  .archive-info span { font-size: .72rem; color: var(--muted); }
+  .archive-empty { font-size: .82rem; color: var(--muted); padding: 8px 8px; }
+
+  .sidebar-footer {
+    padding: 14px 16px; border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .sidebar-footer span { font-size: .82rem; color: var(--muted); }
+  .logout-btn {
+    font-size: .8rem; color: var(--muted); background: none;
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 5px 10px; cursor: pointer; transition: all .15s;
+  }
+  .logout-btn:hover { color: #dc2626; border-color: #dc2626; }
+
+  /* ── Main Content ── */
+  .main { flex: 1; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+  /* Welcome state */
+  .welcome-state {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px;
+    color: var(--muted);
+  }
+  .welcome-state .big-icon { font-size: 3.5rem; }
+  .welcome-state h2 { font-size: 1.3rem; font-weight: 600; color: var(--text); }
+  .welcome-state p { font-size: .9rem; max-width: 340px; text-align: center; line-height: 1.6; }
+
+  /* Chat header */
+  .chat-header {
+    padding: 16px 24px; border-bottom: 1px solid var(--border);
+    background: var(--surface); display: flex; align-items: center;
+    gap: 14px; flex-shrink: 0;
+  }
+  .chat-header-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; }
+  .chat-header-info h3 { font-size: 1rem; font-weight: 700; }
+  .chat-header-info span { font-size: .8rem; color: var(--muted); }
+  .new-chat-btn {
+    margin-left: auto; padding: 8px 16px; background: var(--primary);
+    color: #fff; border: none; border-radius: 8px; font-size: .85rem;
+    font-weight: 600; cursor: pointer; transition: background .2s;
+  }
+  .new-chat-btn:hover { background: var(--primary-h); }
+
+  /* Messages */
+  .messages {
+    flex: 1; overflow-y: auto; padding: 24px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .msg { display: flex; gap: 10px; max-width: 75%; }
+  .msg.user { align-self: flex-end; flex-direction: row-reverse; }
+  .msg.bot  { align-self: flex-start; }
+  .msg-avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .9rem; flex-shrink: 0; margin-top: 2px;
+  }
+  .msg.user .msg-avatar { background: var(--primary); color: #fff; }
+  .msg.bot  .msg-avatar { background: var(--bot-bg); }
+  .msg-bubble {
+    padding: 11px 15px; border-radius: 16px;
+    font-size: .9rem; line-height: 1.55;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .msg.user .msg-bubble { background: var(--user-bg); color: #fff; border-bottom-right-radius: 4px; }
+  .msg.bot  .msg-bubble { background: var(--bot-bg); color: var(--text); border-bottom-left-radius: 4px; }
+  .msg-time { font-size: .7rem; color: var(--muted); margin-top: 4px; text-align: right; }
+  .msg.bot .msg-time { text-align: left; }
+
+  /* Typing indicator */
+  .typing { display: flex; gap: 5px; align-items: center; padding: 12px 15px; }
+  .typing span { width: 7px; height: 7px; background: var(--muted); border-radius: 50%; animation: bounce .9s infinite; }
+  .typing span:nth-child(2) { animation-delay: .15s; }
+  .typing span:nth-child(3) { animation-delay: .3s; }
+  @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} }
+
+  /* Input area */
+  .input-area {
+    padding: 16px 24px 20px; border-top: 1px solid var(--border);
+    background: var(--surface); flex-shrink: 0;
+  }
+  .input-row {
+    display: flex; gap: 10px; align-items: flex-end;
+    background: var(--bg); border: 1.5px solid var(--border);
+    border-radius: 14px; padding: 10px 14px;
+    transition: border-color .2s;
+  }
+  .input-row:focus-within { border-color: var(--primary); }
+  #msg-input {
+    flex: 1; border: none; background: none; outline: none;
+    font-size: .95rem; resize: none; max-height: 120px;
+    font-family: inherit; line-height: 1.5;
+  }
+  .send-btn {
+    width: 36px; height: 36px; background: var(--primary); color: #fff;
+    border: none; border-radius: 10px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: background .2s; font-size: 1rem;
+  }
+  .send-btn:hover { background: var(--primary-h); }
+  .send-btn:disabled { background: var(--border); cursor: not-allowed; }
+  .input-hint { font-size: .72rem; color: var(--muted); margin-top: 6px; padding-left: 4px; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════
+     LOGIN SCREEN
+══════════════════════════════ -->
+<div id="login-screen" class="screen active">
+  <div class="login-card">
+    <h1>🍽️ Küchen-Assistent</h1>
+    <p>Bitte melde dich an, um fortzufahren.</p>
+    <input type="text" id="login-user" placeholder="Benutzername" autocomplete="username" />
+    <input type="password" id="login-pass" placeholder="Passwort" autocomplete="current-password" />
+    <div class="login-error" id="login-error">Falscher Benutzername oder Passwort.</div>
+    <button onclick="doLogin()">Anmelden</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     APP SCREEN
+══════════════════════════════ -->
+<div id="app-screen" class="screen">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h2>🍽️ Küchen-Assistent</h2>
+    </div>
+
+    <!-- Agenten -->
+    <div class="agent-section">
+      <h3>Agenten</h3>
+      <div id="agent-list"></div>
+    </div>
+
+    <!-- Archiv -->
+    <div class="archive-section">
+      <h3>Chat-Archiv</h3>
+      <div id="archive-list"><p class="archive-empty">Noch keine Chats.</p></div>
+    </div>
+
+    <div class="sidebar-footer">
+      <span id="user-label">👤 Gast</span>
+      <button class="logout-btn" onclick="doLogout()">Abmelden</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main" id="main">
+
+    <!-- Welcome -->
+    <div class="welcome-state" id="welcome-state">
+      <div class="big-icon">👨‍🍳</div>
+      <h2>Willkommen!</h2>
+      <p>Wähle links einen Agenten aus, um einen neuen Chat zu starten.</p>
+    </div>
+
+    <!-- Chat (hidden initially) -->
+    <div id="chat-view" style="display:none; flex-direction:column; height:100%;">
+      <div class="chat-header" id="chat-header">
+        <div class="chat-header-icon" id="header-icon"></div>
+        <div class="chat-header-info">
+          <h3 id="header-name"></h3>
+          <span id="header-desc"></span>
+        </div>
+        <button class="new-chat-btn" onclick="newChat()">+ Neuer Chat</button>
+      </div>
+
+      <div class="messages" id="messages"></div>
+
+      <div class="input-area">
+        <div class="input-row">
+          <textarea id="msg-input" rows="1" placeholder="Nachricht eingeben…"></textarea>
+          <button class="send-btn" id="send-btn" onclick="sendMessage()">➤</button>
+        </div>
+        <div class="input-hint">Enter zum Senden · Shift+Enter für neue Zeile</div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════
+   KONFIGURATION — hier anpassen
+══════════════════════════════════════════════════════ */
+const CONFIG = {
+  // Login-Zugänge: { username: "passwort" }
+  users: {
+    "kunde1":  "passwort123",
+    "admin":   "admin2026",
+    "demo":    "demo"
+  },
+
+  // Bis zu 4 Agenten — Flowise chatflowId eintragen
+  agents: [
+    {
+      id: "agent-1",
+      name: "Küchen-Assistent",
+      description: "Einkaufslisten & Menüplanung",
+      icon: "🍽️",
+      color: "#dbeafe",
+      chatflowId: "DEINE-FLOWISE-CHATFLOW-ID-1",
+      flowiseUrl: "https://DEIN-FLOWISE-SERVER/api/v1/prediction/"
+    },
+    {
+      id: "agent-2",
+      name: "Rezept-Berater",
+      description: "Rezepte & Zubereitungstipps",
+      icon: "📖",
+      color: "#dcfce7",
+      chatflowId: "DEINE-FLOWISE-CHATFLOW-ID-2",
+      flowiseUrl: "https://DEIN-FLOWISE-SERVER/api/v1/prediction/"
+    },
+    {
+      id: "agent-3",
+      name: "Kalkulations-Helfer",
+      description: "Mengen & Kosten berechnen",
+      icon: "🧮",
+      color: "#fef9c3",
+      chatflowId: "DEINE-FLOWISE-CHATFLOW-ID-3",
+      flowiseUrl: "https://DEIN-FLOWISE-SERVER/api/v1/prediction/"
+    },
+    {
+      id: "agent-4",
+      name: "Allergen-Checker",
+      description: "Allergene & Unverträglichkeiten",
+      icon: "⚠️",
+      color: "#fee2e2",
+      chatflowId: "DEINE-FLOWISE-CHATFLOW-ID-4",
+      flowiseUrl: "https://DEIN-FLOWISE-SERVER/api/v1/prediction/"
+    }
+  ],
+
+  // Flowise API-Key (optional, falls aktiviert)
+  flowiseApiKey: ""
+};
+
+/* ══════════════════════════════════════════════════════
+   STATE
+══════════════════════════════════════════════════════ */
+let state = {
+  user: null,
+  activeAgent: null,
+  activeSessionId: null,
+  sessions: {},   // sessionId → { agentId, title, messages: [] }
+  isLoading: false
+};
+
+/* ══════════════════════════════════════════════════════
+   STORAGE HELPERS
+══════════════════════════════════════════════════════ */
+function saveToStorage() {
+  localStorage.setItem("kp_sessions_" + state.user, JSON.stringify(state.sessions));
+}
+function loadFromStorage(user) {
+  const raw = localStorage.getItem("kp_sessions_" + user);
+  return raw ? JSON.parse(raw) : {};
+}
+
+/* ══════════════════════════════════════════════════════
+   LOGIN / LOGOUT
+══════════════════════════════════════════════════════ */
+function doLogin() {
+  const u = document.getElementById("login-user").value.trim();
+  const p = document.getElementById("login-pass").value;
+  const err = document.getElementById("login-error");
+
+  if (CONFIG.users[u] && CONFIG.users[u] === p) {
+    err.style.display = "none";
+    state.user = u;
+    state.sessions = loadFromStorage(u);
+    document.getElementById("user-label").textContent = "👤 " + u;
+    showScreen("app-screen");
+    renderAgents();
+    renderArchive();
+  } else {
+    err.style.display = "block";
+  }
+}
+
+function doLogout() {
+  state = { user: null, activeAgent: null, activeSessionId: null, sessions: {}, isLoading: false };
+  document.getElementById("login-user").value = "";
+  document.getElementById("login-pass").value = "";
+  showScreen("login-screen");
+}
+
+document.getElementById("login-pass").addEventListener("keydown", e => {
+  if (e.key === "Enter") doLogin();
+});
+
+/* ══════════════════════════════════════════════════════
+   SCREENS
+══════════════════════════════════════════════════════ */
+function showScreen(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
+
+/* ══════════════════════════════════════════════════════
+   AGENTS
+══════════════════════════════════════════════════════ */
+function renderAgents() {
+  const list = document.getElementById("agent-list");
+  list.innerHTML = "";
+  CONFIG.agents.forEach(agent => {
+    const btn = document.createElement("button");
+    btn.className = "agent-btn" + (state.activeAgent?.id === agent.id ? " active" : "");
+    btn.innerHTML = `
+      <div class="agent-icon" style="background:${agent.color}">${agent.icon}</div>
+      <div class="agent-info">
+        <strong>${agent.name}</strong>
+        <span>${agent.description}</span>
+      </div>`;
+    btn.onclick = () => selectAgent(agent);
+    list.appendChild(btn);
+  });
+}
+
+function selectAgent(agent) {
+  state.activeAgent = agent;
+  state.activeSessionId = null;
+  renderAgents();
+  showChatView(agent);
+  renderMessages();
+}
+
+/* ══════════════════════════════════════════════════════
+   CHAT VIEW
+══════════════════════════════════════════════════════ */
+function showChatView(agent) {
+  document.getElementById("welcome-state").style.display = "none";
+  const cv = document.getElementById("chat-view");
+  cv.style.display = "flex";
+  document.getElementById("header-icon").textContent = agent.icon;
+  document.getElementById("header-icon").style.background = agent.color;
+  document.getElementById("header-name").textContent = agent.name;
+  document.getElementById("header-desc").textContent = agent.description;
+}
+
+function newChat() {
+  if (!state.activeAgent) return;
+  state.activeSessionId = null;
+  renderMessages();
+  renderArchive();
+}
+
+/* ══════════════════════════════════════════════════════
+   ARCHIVE
+══════════════════════════════════════════════════════ */
+function renderArchive() {
+  const list = document.getElementById("archive-list");
+  const sessions = Object.values(state.sessions).sort((a,b) => b.updatedAt - a.updatedAt);
+
+  if (sessions.length === 0) {
+    list.innerHTML = '<p class="archive-empty">Noch keine Chats.</p>';
+    return;
+  }
+
+  list.innerHTML = "";
+  sessions.forEach(sess => {
+    const agent = CONFIG.agents.find(a => a.id === sess.agentId);
+    const btn = document.createElement("button");
+    btn.className = "archive-item" + (state.activeSessionId === sess.id ? " active" : "");
+    const date = new Date(sess.updatedAt).toLocaleDateString("de-DE", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" });
+    btn.innerHTML = `
+      <div class="archive-dot" style="background:${agent?.color || '#ccc'}"></div>
+      <div class="archive-info">
+        <strong>${sess.title}</strong>
+        <span>${agent?.icon || ""} ${agent?.name || "Unbekannt"} · ${date}</span>
+      </div>`;
+    btn.onclick = () => loadSession(sess.id);
+    list.appendChild(btn);
+  });
+}
+
+function loadSession(sessionId) {
+  const sess = state.sessions[sessionId];
+  if (!sess) return;
+  const agent = CONFIG.agents.find(a => a.id === sess.agentId);
+  if (!agent) return;
+  state.activeAgent = agent;
+  state.activeSessionId = sessionId;
+  renderAgents();
+  showChatView(agent);
+  renderMessages();
+  renderArchive();
+}
+
+/* ══════════════════════════════════════════════════════
+   MESSAGES
+══════════════════════════════════════════════════════ */
+function renderMessages() {
+  const container = document.getElementById("messages");
+  container.innerHTML = "";
+
+  if (!state.activeSessionId) {
+    // Neue Session — Begrüßung
+    const agent = state.activeAgent;
+    appendMessage("bot", `Hallo! Ich bin dein ${agent.name}. ${agent.description}. Wie kann ich dir helfen?`, Date.now());
+    return;
+  }
+
+  const sess = state.sessions[state.activeSessionId];
+  if (!sess) return;
+  sess.messages.forEach(m => appendMessage(m.role, m.content, m.ts));
+  scrollToBottom();
+}
+
+function appendMessage(role, content, ts) {
+  const container = document.getElementById("messages");
+  const agent = state.activeAgent;
+
+  const wrap = document.createElement("div");
+  wrap.className = "msg " + role;
+
+  const avatar = document.createElement("div");
+  avatar.className = "msg-avatar";
+  avatar.textContent = role === "user" ? "👤" : (agent?.icon || "🤖");
+  if (role === "bot") avatar.style.background = agent?.color || "#f0f2f5";
+
+  const inner = document.createElement("div");
+  const bubble = document.createElement("div");
+  bubble.className = "msg-bubble";
+  bubble.textContent = content;
+
+  const time = document.createElement("div");
+  time.className = "msg-time";
+  time.textContent = new Date(ts).toLocaleTimeString("de-DE", { hour:"2-digit", minute:"2-digit" });
+
+  inner.appendChild(bubble);
+  inner.appendChild(time);
+  wrap.appendChild(avatar);
+  wrap.appendChild(inner);
+  container.appendChild(wrap);
+  scrollToBottom();
+}
+
+function appendTyping() {
+  const container = document.getElementById("messages");
+  const wrap = document.createElement("div");
+  wrap.className = "msg bot";
+  wrap.id = "typing-indicator";
+
+  const avatar = document.createElement("div");
+  avatar.className = "msg-avatar";
+  avatar.textContent = state.activeAgent?.icon || "🤖";
+  avatar.style.background = state.activeAgent?.color || "#f0f2f5";
+
+  const bubble = document.createElement("div");
+  bubble.className = "msg-bubble";
+  bubble.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
+
+  wrap.appendChild(avatar);
+  wrap.appendChild(bubble);
+  container.appendChild(wrap);
+  scrollToBottom();
+}
+
+function removeTyping() {
+  const el = document.getElementById("typing-indicator");
+  if (el) el.remove();
+}
+
+function scrollToBottom() {
+  const c = document.getElementById("messages");
+  c.scrollTop = c.scrollHeight;
+}
+
+/* ══════════════════════════════════════════════════════
+   SEND MESSAGE
+══════════════════════════════════════════════════════ */
+async function sendMessage() {
+  const input = document.getElementById("msg-input");
+  const text = input.value.trim();
+  if (!text || state.isLoading || !state.activeAgent) return;
+
+  input.value = "";
+  input.style.height = "auto";
+  state.isLoading = true;
+  document.getElementById("send-btn").disabled = true;
+
+  const ts = Date.now();
+
+  // Neue Session anlegen falls nötig
+  if (!state.activeSessionId) {
+    const sessionId = "sess_" + ts + "_" + Math.random().toString(36).slice(2,7);
+    state.activeSessionId = sessionId;
+    state.sessions[sessionId] = {
+      id: sessionId,
+      agentId: state.activeAgent.id,
+      title: text.slice(0, 40) + (text.length > 40 ? "…" : ""),
+      messages: [],
+      createdAt: ts,
+      updatedAt: ts
+    };
+    // Begrüßungsnachricht aus DOM entfernen und in Session übernehmen
+    document.getElementById("messages").innerHTML = "";
+  }
+
+  // User-Nachricht speichern & anzeigen
+  const userMsg = { role: "user", content: text, ts };
+  state.sessions[state.activeSessionId].messages.push(userMsg);
+  state.sessions[state.activeSessionId].updatedAt = ts;
+  appendMessage("user", text, ts);
+  saveToStorage();
+  renderArchive();
+
+  // Typing indicator
+  appendTyping();
+
+  try {
+    const agent = state.activeAgent;
+    const sess = state.sessions[state.activeSessionId];
+
+    const headers = { "Content-Type": "application/json" };
+    if (CONFIG.flowiseApiKey) headers["Authorization"] = "Bearer " + CONFIG.flowiseApiKey;
+
+    const body = {
+      question: text,
+      sessionId: state.activeSessionId
+    };
+
+    const res = await fetch(agent.flowiseUrl + agent.chatflowId, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    const answer = data.text || data.answer || data.output || JSON.stringify(data);
+
+    removeTyping();
+    const botMsg = { role: "bot", content: answer, ts: Date.now() };
+    sess.messages.push(botMsg);
+    sess.updatedAt = botMsg.ts;
+    appendMessage("bot", answer, botMsg.ts);
+    saveToStorage();
+
+  } catch (err) {
+    removeTyping();
+    const errMsg = { role: "bot", content: "⚠️ Fehler beim Verbinden mit dem Agenten. Bitte prüfe die Flowise-URL und Chatflow-ID.\n\nDetails: " + err.message, ts: Date.now() };
+    state.sessions[state.activeSessionId].messages.push(errMsg);
+    appendMessage("bot", errMsg.content, errMsg.ts);
+    saveToStorage();
+  }
+
+  state.isLoading = false;
+  document.getElementById("send-btn").disabled = false;
+  input.focus();
+}
+
+/* ── Auto-resize textarea ── */
+document.getElementById("msg-input").addEventListener("input", function() {
+  this.style.height = "auto";
+  this.style.height = Math.min(this.scrollHeight, 120) + "px";
+});
+
+document.getElementById("msg-input").addEventListener("keydown", function(e) {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+/* ── Auto-login check ── */
+window.addEventListener("load", () => {
+  const saved = sessionStorage.getItem("kp_user");
+  if (saved && CONFIG.users[saved]) {
+    document.getElementById("login-user").value = saved;
+  }
+});
+</script>
+</body>
+</html>
