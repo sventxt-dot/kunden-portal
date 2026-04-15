@@ -169,9 +169,24 @@
     padding: 12px 16px; border-radius: 16px;
     font-size: .92rem; line-height: 1.7; white-space: pre-wrap; word-break: break-word;
   }
+  .msg.bot .msg-bubble { white-space: normal; }
   .msg.user .msg-bubble { background: var(--user-bg); color: #fff; border-bottom-right-radius: 4px; }
   .msg.bot  .msg-bubble { background: var(--bot-bg); color: var(--text); border-bottom-left-radius: 4px; }
   .msg-bubble a { color: var(--primary); text-decoration: underline; word-break: break-all; }
+  .msg.bot .msg-bubble h1,.msg.bot .msg-bubble h2,.msg.bot .msg-bubble h3 { font-weight: 700; margin: 10px 0 4px; line-height: 1.3; }
+  .msg.bot .msg-bubble h1 { font-size: 1.1rem; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+  .msg.bot .msg-bubble h2 { font-size: 1rem; }
+  .msg.bot .msg-bubble h3 { font-size: .95rem; }
+  .msg.bot .msg-bubble p { margin: 0 0 8px; }
+  .msg.bot .msg-bubble p:last-child { margin-bottom: 0; }
+  .msg.bot .msg-bubble ul,.msg.bot .msg-bubble ol { padding-left: 20px; margin: 4px 0 8px; }
+  .msg.bot .msg-bubble li { margin-bottom: 2px; }
+  .msg.bot .msg-bubble strong { font-weight: 700; }
+  .msg.bot .msg-bubble em { font-style: italic; }
+  .msg.bot .msg-bubble code { background: rgba(0,0,0,.07); border-radius: 4px; padding: 1px 5px; font-size: .85em; font-family: monospace; }
+  .msg.bot .msg-bubble pre { background: rgba(0,0,0,.07); border-radius: 8px; padding: 10px 12px; overflow-x: auto; margin: 6px 0; }
+  .msg.bot .msg-bubble pre code { background: none; padding: 0; }
+  .msg.bot .msg-bubble hr { border: none; border-top: 1px solid var(--border); margin: 8px 0; }
   .msg-time { font-size: .7rem; color: var(--muted); margin-top: 4px; }
   .msg.user .msg-time { text-align: right; }
 
@@ -241,6 +256,7 @@
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   }
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
 </head>
 <body>
 
@@ -514,11 +530,16 @@ function appendMessage(role, content, ts) {
   var bubble = document.createElement("div");
   bubble.className = "msg-bubble";
   if (role === "bot") {
-    // Linkify: URLs als klickbare Links in neuem Tab
-    var esc = content.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-    bubble.innerHTML = esc.replace(/(https?:\/\/[^\s]+)/g, function(url) {
-      return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + url + '</a>';
-    });
+    if (typeof marked !== 'undefined') {
+      bubble.innerHTML = marked.parse(content, { breaks: true });
+      // open all links in new tab
+      bubble.querySelectorAll('a').forEach(function(a) {
+        a.setAttribute('target','_blank');
+        a.setAttribute('rel','noopener noreferrer');
+      });
+    } else {
+      bubble.textContent = content;
+    }
   } else {
     bubble.textContent = content;
   }
@@ -667,7 +688,6 @@ async function sendMessage(overrideText) {
       question: text || "Bitte analysiere das angehaengte PDF.",
       chatId: state.activeSessionId,
       overrideConfig: {},
-      streaming: false
     };
 
     if (state.pendingPdf) {
@@ -681,6 +701,9 @@ async function sendMessage(overrideText) {
       removePdf();
     }
 
+    // Streaming: set streaming:true and read SSE chunks
+    payload.streaming = true;
+
     var res = await fetch(agent.flowiseUrl + agent.chatflowId, {
       method: "POST",
       headers: headers,
@@ -688,14 +711,89 @@ async function sendMessage(overrideText) {
     });
 
     if (!res.ok) throw new Error("HTTP " + res.status);
-    var data = await res.json();
-    var answer = data.text || data.answer || data.output || JSON.stringify(data);
 
     removeTyping();
-    var botMsg = { role: "bot", content: answer, ts: Date.now() };
+
+    // Create streaming bubble
+    var nowTs = Date.now();
+    var streamWrap = document.createElement("div");
+    streamWrap.className = "msg bot";
+    var streamAvatar = document.createElement("div");
+    streamAvatar.className = "msg-avatar";
+    streamAvatar.textContent = agent ? agent.icon : "\ud83e\udd16";
+    streamAvatar.style.background = agent ? agent.color : "#f0f2f5";
+    var streamInner = document.createElement("div");
+    var streamBubble = document.createElement("div");
+    streamBubble.className = "msg-bubble";
+    var streamTime = document.createElement("div");
+    streamTime.className = "msg-time";
+    streamTime.textContent = new Date(nowTs).toLocaleTimeString("de-DE", { hour:"2-digit", minute:"2-digit" });
+    streamInner.appendChild(streamBubble);
+    streamInner.appendChild(streamTime);
+    streamWrap.appendChild(streamAvatar);
+    streamWrap.appendChild(streamInner);
+    document.getElementById("messages").appendChild(streamWrap);
+    scrollToBottom();
+
+    var reader = res.body.getReader();
+    var decoder = new TextDecoder();
+    var fullAnswer = "";
+    var buffer = "";
+
+    while (true) {
+      var result = await reader.read();
+      if (result.done) break;
+      buffer += decoder.decode(result.value, { stream: true });
+      var lines = buffer.split("\n");
+      buffer = lines.pop(); // keep incomplete line
+      for (var li = 0; li < lines.length; li++) {
+        var line = lines[li].trim();
+        if (!line || line === "data: [DONE]") continue;
+        if (line.startsWith("data: ")) {
+          try {
+            var chunk = JSON.parse(line.slice(6));
+            var token = chunk.token || chunk.text || chunk.answer || "";
+            if (token) {
+              fullAnswer += token;
+              if (typeof marked !== 'undefined') {
+                streamBubble.innerHTML = marked.parse(fullAnswer, { breaks: true });
+                streamBubble.querySelectorAll('a').forEach(function(a) {
+                  a.setAttribute('target','_blank');
+                  a.setAttribute('rel','noopener noreferrer');
+                });
+              } else {
+                streamBubble.textContent = fullAnswer;
+              }
+              scrollToBottom();
+            }
+          } catch(e) {}
+        }
+      }
+    }
+
+    // If streaming gave nothing, try parsing as JSON
+    if (!fullAnswer) {
+      try {
+        var jsonData = JSON.parse(buffer || "{}");
+        fullAnswer = jsonData.text || jsonData.answer || jsonData.output || "";
+      } catch(e) {}
+    }
+    if (!fullAnswer) fullAnswer = "(Keine Antwort erhalten)";
+
+    // Final render
+    if (typeof marked !== 'undefined') {
+      streamBubble.innerHTML = marked.parse(fullAnswer, { breaks: true });
+      streamBubble.querySelectorAll('a').forEach(function(a) {
+        a.setAttribute('target','_blank');
+        a.setAttribute('rel','noopener noreferrer');
+      });
+    } else {
+      streamBubble.textContent = fullAnswer;
+    }
+
+    var botMsg = { role: "bot", content: fullAnswer, ts: nowTs };
     sess.messages.push(botMsg);
     sess.updatedAt = botMsg.ts;
-    appendMessage("bot", answer, botMsg.ts);
     saveToStorage();
 
   } catch (err) {
