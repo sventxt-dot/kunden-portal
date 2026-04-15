@@ -10,6 +10,7 @@
     --primary:   #8b2a3a;
     --primary-h: #6e2030;
     --primary-light: #f5eaec;
+    --accent:    #9a9a9a;
     --bg:        #f4f5f7;
     --surface:   #ffffff;
     --border:    #e2e4e9;
@@ -20,94 +21,225 @@
     --radius:    12px;
   }
   body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; }
+
   .screen { display: none; height: 100vh; }
   .screen.active { display: flex; }
-  #login-screen { align-items: center; justify-content: center; background: linear-gradient(135deg, #3a1020 0%, #8b2a3a 100%); }
-  .login-card { background: var(--surface); border-radius: 20px; padding: 40px 40px 48px; width: 380px; box-shadow: 0 20px 60px rgba(0,0,0,.3); display: flex; flex-direction: column; gap: 20px; align-items: center; }
+
+  /* LOGIN */
+  #login-screen {
+    align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #3a1020 0%, #8b2a3a 100%);
+  }
+  .login-card {
+    background: var(--surface); border-radius: 20px;
+    padding: 40px 40px 48px; width: 380px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.3);
+    display: flex; flex-direction: column; gap: 20px;
+    align-items: center;
+  }
   .login-logo { width: 160px; object-fit: contain; margin-bottom: 4px; }
   .login-divider { width: 100%; height: 1px; background: var(--border); }
   .login-card h2 { font-size: 1rem; font-weight: 600; color: var(--muted); letter-spacing: .03em; }
-  .login-card input { width: 100%; padding: 12px 16px; border: 1.5px solid var(--border); border-radius: var(--radius); font-size: 1rem; outline: none; transition: border-color .2s; font-family: inherit; }
+  .login-card input {
+    width: 100%; padding: 12px 16px; border: 1.5px solid var(--border);
+    border-radius: var(--radius); font-size: 1rem; outline: none;
+    transition: border-color .2s; font-family: inherit;
+  }
   .login-card input:focus { border-color: var(--primary); }
   .login-fields { display: flex; flex-direction: column; gap: 12px; width: 100%; }
-  .login-card button { width: 100%; padding: 13px; background: var(--primary); color: #fff; border: none; border-radius: var(--radius); font-size: 1rem; font-weight: 600; cursor: pointer; transition: background .2s; font-family: inherit; }
+  .login-card button {
+    width: 100%; padding: 13px; background: var(--primary); color: #fff;
+    border: none; border-radius: var(--radius); font-size: 1rem;
+    font-weight: 600; cursor: pointer; transition: background .2s; font-family: inherit;
+  }
   .login-card button:hover { background: var(--primary-h); }
   .login-error { color: #dc2626; font-size: .85rem; text-align: center; display: none; }
+
+  /* APP */
   #app-screen { flex-direction: row; }
-  .sidebar { width: 280px; min-width: 280px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; height: 100vh; }
-  .sidebar-logo-wrap { padding: 20px 20px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: center; }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: 280px; min-width: 280px; background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; height: 100vh;
+  }
+  .sidebar-logo-wrap {
+    padding: 20px 20px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+  }
   .sidebar-logo { width: 130px; object-fit: contain; }
-  .section-label { font-size: .7rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; padding: 16px 20px 8px; }
-  .agent-btn { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: none; background: none; cursor: pointer; text-align: left; transition: background .15s; margin: 1px 0; }
+
+  .section-label {
+    font-size: .7rem; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .08em;
+    padding: 16px 20px 8px;
+  }
+
+  .agent-btn {
+    width: 100%; display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px; border: none; background: none;
+    cursor: pointer; text-align: left; transition: background .15s;
+    margin: 1px 0;
+  }
   .agent-btn:hover { background: var(--bg); }
   .agent-btn.active { background: var(--primary-light); }
-  .agent-icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.15rem; flex-shrink: 0; }
+  .agent-icon {
+    width: 38px; height: 38px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.15rem; flex-shrink: 0;
+  }
   .agent-info strong { font-size: .88rem; display: block; }
   .agent-info span { font-size: .75rem; color: var(--muted); }
+
+  /* Archive */
   .archive-wrap { flex: 1; overflow-y: auto; border-top: 1px solid var(--border); }
-  .archive-item { width: 100%; display: flex; align-items: flex-start; gap: 10px; padding: 9px 14px; border: none; background: none; cursor: pointer; text-align: left; transition: background .15s; }
+  .archive-item {
+    width: 100%; display: flex; align-items: flex-start; gap: 10px;
+    padding: 9px 14px; border: none; background: none;
+    cursor: pointer; text-align: left; transition: background .15s;
+  }
   .archive-item:hover { background: var(--bg); }
   .archive-item.active { background: var(--primary-light); }
-  .archive-del-btn { margin-left: auto; flex-shrink: 0; background: none; border: none; cursor: pointer; font-size: .85rem; opacity: 0; padding: 2px 4px; border-radius: 4px; transition: opacity .15s, background .15s; color: var(--muted); }
+  .archive-del-btn {
+    margin-left: auto; flex-shrink: 0; background: none; border: none;
+    cursor: pointer; font-size: .85rem; opacity: 0; padding: 2px 4px;
+    border-radius: 4px; transition: opacity .15s, background .15s;
+    color: var(--muted);
+  }
   .archive-item:hover .archive-del-btn { opacity: 1; }
   .archive-del-btn:hover { background: #fee2e2; color: #dc2626; }
   .archive-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
   .archive-info strong { font-size: .82rem; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px; }
   .archive-info span { font-size: .72rem; color: var(--muted); }
   .archive-empty { font-size: .82rem; color: var(--muted); padding: 12px 20px; }
-  .sidebar-footer { padding: 14px 16px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+
+  .sidebar-footer {
+    padding: 14px 16px; border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
   .sidebar-footer span { font-size: .82rem; color: var(--muted); }
-  .logout-btn { font-size: .8rem; color: var(--muted); background: none; border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; cursor: pointer; transition: all .15s; font-family: inherit; }
+  .logout-btn {
+    font-size: .8rem; color: var(--muted); background: none;
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 5px 10px; cursor: pointer; transition: all .15s; font-family: inherit;
+  }
   .logout-btn:hover { color: var(--primary); border-color: var(--primary); }
+
+  /* MAIN */
   .main { flex: 1; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-  .welcome-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: var(--muted); }
+
+  .welcome-state {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px; color: var(--muted);
+  }
   .welcome-logo { width: 180px; opacity: .25; }
   .welcome-state h2 { font-size: 1.2rem; font-weight: 600; color: var(--text); }
   .welcome-state p { font-size: .9rem; max-width: 320px; text-align: center; line-height: 1.6; }
-  .chat-header { padding: 14px 24px; border-bottom: 1px solid var(--border); background: var(--surface); display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+
+  /* Chat header */
+  .chat-header {
+    padding: 14px 24px; border-bottom: 1px solid var(--border);
+    background: var(--surface); display: flex; align-items: center;
+    gap: 14px; flex-shrink: 0;
+  }
   .chat-header-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; }
   .chat-header-info h3 { font-size: 1rem; font-weight: 700; }
   .chat-header-info span { font-size: .8rem; color: var(--muted); }
-  .new-chat-btn { margin-left: auto; padding: 8px 16px; background: var(--primary); color: #fff; border: none; border-radius: 8px; font-size: .85rem; font-weight: 600; cursor: pointer; transition: background .2s; font-family: inherit; }
+  .new-chat-btn {
+    margin-left: auto; padding: 8px 16px; background: var(--primary);
+    color: #fff; border: none; border-radius: 8px; font-size: .85rem;
+    font-weight: 600; cursor: pointer; transition: background .2s; font-family: inherit;
+  }
   .new-chat-btn:hover { background: var(--primary-h); }
+
+  /* Messages */
   .messages { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
   .msg { display: flex; gap: 10px; max-width: 78%; }
   .msg.user { align-self: flex-end; flex-direction: row-reverse; }
   .msg.bot  { align-self: flex-start; }
-  .msg-avatar { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .9rem; flex-shrink: 0; margin-top: 2px; }
+  .msg-avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .9rem; flex-shrink: 0; margin-top: 2px;
+  }
   .msg.user .msg-avatar { background: var(--primary); color: #fff; }
   .msg.bot  .msg-avatar { background: var(--bot-bg); }
-  .msg-bubble { padding: 11px 15px; border-radius: 16px; font-size: .9rem; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+  .msg-bubble {
+    padding: 11px 15px; border-radius: 16px;
+    font-size: .9rem; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+  }
   .msg.user .msg-bubble { background: var(--user-bg); color: #fff; border-bottom-right-radius: 4px; }
   .msg.bot  .msg-bubble { background: var(--bot-bg); color: var(--text); border-bottom-left-radius: 4px; }
   .msg-time { font-size: .7rem; color: var(--muted); margin-top: 4px; }
   .msg.user .msg-time { text-align: right; }
+
+  /* Typing */
   .typing { display: flex; gap: 5px; align-items: center; padding: 12px 15px; }
   .typing span { width: 7px; height: 7px; background: var(--muted); border-radius: 50%; animation: bounce .9s infinite; }
   .typing span:nth-child(2) { animation-delay: .15s; }
   .typing span:nth-child(3) { animation-delay: .3s; }
   @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} }
+
+  /* Input */
   .input-area { padding: 16px 24px 20px; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
-  .pdf-preview { display: none; align-items: center; gap: 8px; background: var(--primary-light); border: 1px solid #d4a0a8; border-radius: 8px; padding: 7px 12px; margin-bottom: 8px; font-size: .82rem; }
+
+  /* PDF Preview */
+  .pdf-preview {
+    display: none; align-items: center; gap: 8px;
+    background: var(--primary-light); border: 1px solid #d4a0a8;
+    border-radius: 8px; padding: 7px 12px; margin-bottom: 8px; font-size: .82rem;
+  }
   .pdf-preview.visible { display: flex; }
   .pdf-preview-name { font-weight: 600; color: var(--primary); }
   .pdf-preview-size { color: var(--muted); }
-  .pdf-remove { margin-left: auto; background: none; border: none; cursor: pointer; color: var(--muted); font-size: .9rem; padding: 2px 4px; border-radius: 4px; transition: background .15s, color .15s; }
+  .pdf-remove {
+    margin-left: auto; background: none; border: none; cursor: pointer;
+    color: var(--muted); font-size: .9rem; padding: 2px 4px; border-radius: 4px;
+    transition: background .15s, color .15s;
+  }
   .pdf-remove:hover { background: #fecdd3; color: #dc2626; }
-  .input-row { display: flex; gap: 10px; align-items: flex-end; background: var(--bg); border: 1.5px solid var(--border); border-radius: 14px; padding: 10px 14px; transition: border-color .2s; }
+
+  .input-row {
+    display: flex; gap: 10px; align-items: flex-end;
+    background: var(--bg); border: 1.5px solid var(--border);
+    border-radius: 14px; padding: 10px 14px; transition: border-color .2s;
+  }
   .input-row:focus-within { border-color: var(--primary); }
-  .pdf-btn { background: none; border: none; cursor: pointer; font-size: 1.1rem; padding: 4px 6px; border-radius: 8px; transition: background .15s; flex-shrink: 0; opacity: 0.6; }
+
+  .pdf-btn {
+    background: none; border: none; cursor: pointer; font-size: 1.1rem;
+    padding: 4px 6px; border-radius: 8px; transition: background .15s;
+    flex-shrink: 0; opacity: 0.6;
+  }
   .pdf-btn:hover { background: var(--border); opacity: 1; }
   .pdf-btn.has-file { opacity: 1; }
-  #msg-input { flex: 1; border: none; background: none; outline: none; font-size: .95rem; resize: none; max-height: 120px; font-family: inherit; line-height: 1.5; }
-  .send-btn { width: 36px; height: 36px; background: var(--primary); color: #fff; border: none; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background .2s; font-size: 1rem; }
+
+  #msg-input {
+    flex: 1; border: none; background: none; outline: none;
+    font-size: .95rem; resize: none; max-height: 120px; font-family: inherit; line-height: 1.5;
+  }
+  .send-btn {
+    width: 36px; height: 36px; background: var(--primary); color: #fff;
+    border: none; border-radius: 10px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: background .2s; font-size: 1rem;
+  }
   .send-btn:hover { background: var(--primary-h); }
   .send-btn:disabled { background: var(--border); cursor: not-allowed; }
   .input-hint { font-size: .72rem; color: var(--muted); margin-top: 6px; padding-left: 4px; }
+
   ::-webkit-scrollbar { width: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  if (typeof pdfjsLib !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+</script>
 </head>
 <body>
 
@@ -132,14 +264,17 @@
     <div class="sidebar-logo-wrap">
       <img class="sidebar-logo" src="" alt="Messerich Catering" />
     </div>
+
     <div class="section-label">Agenten</div>
     <div id="agent-list"></div>
-    <div class="section-label" style="border-top:1px solid var(--border);padding-top:16px;">Chat-Archiv</div>
+
+    <div class="section-label" style="border-top: 1px solid var(--border); padding-top: 16px;">Chat-Archiv</div>
     <div class="archive-wrap">
       <div id="archive-list"><p class="archive-empty">Noch keine Chats.</p></div>
     </div>
+
     <div class="sidebar-footer">
-      <span id="user-label">Gast</span>
+      <span id="user-label">👤 Gast</span>
       <button class="logout-btn" onclick="doLogout()">Abmelden</button>
     </div>
   </aside>
@@ -148,9 +283,10 @@
     <div class="welcome-state" id="welcome-state">
       <img class="welcome-logo" src="" alt="Messerich Catering" />
       <h2>Willkommen!</h2>
-      <p>Waehle links einen Assistenten aus, um einen neuen Chat zu starten.</p>
+      <p>Wähle links einen Assistenten aus, um einen neuen Chat zu starten.</p>
     </div>
-    <div id="chat-view" style="display:none;flex-direction:column;height:100%;">
+
+    <div id="chat-view" style="display:none; flex-direction:column; height:100%;">
       <div class="chat-header">
         <div class="chat-header-icon" id="header-icon"></div>
         <div class="chat-header-info">
@@ -164,15 +300,15 @@
         <div class="pdf-preview" id="pdf-preview">
           <span class="pdf-preview-name" id="pdf-name"></span>
           <span class="pdf-preview-size" id="pdf-size"></span>
-          <button class="pdf-remove" onclick="removePdf()" title="Entfernen">x</button>
+          <button class="pdf-remove" onclick="removePdf()" title="Entfernen">✕</button>
         </div>
         <div class="input-row">
           <input type="file" id="pdf-input" accept="application/pdf" style="display:none" onchange="handlePdf(this)">
-          <button class="pdf-btn" id="pdf-btn" onclick="document.getElementById('pdf-input').click()" title="PDF anhaengen">📎</button>
-          <textarea id="msg-input" rows="1" placeholder="Nachricht eingeben..."></textarea>
-          <button class="send-btn" id="send-btn" onclick="sendMessage()">&#x27A4;</button>
+          <button class="pdf-btn" id="pdf-btn" onclick="document.getElementById('pdf-input').click()" title="PDF anhängen">📎</button>
+          <textarea id="msg-input" rows="1" placeholder="Nachricht eingeben…"></textarea>
+          <button class="send-btn" id="send-btn" onclick="sendMessage()">➤</button>
         </div>
-        <div class="input-hint">Enter zum Senden &middot; Shift+Enter neue Zeile &middot; 📎 PDF anhaengen</div>
+        <div class="input-hint">Enter zum Senden · Shift+Enter neue Zeile · 📎 PDF anhängen</div>
       </div>
     </div>
   </main>
@@ -184,13 +320,12 @@ const CONFIG = {
   agents: [
     {
       id: "agent-kueche",
-      name: "Kuechen-Assistent",
-      description: "Einkaufslisten & Menuplanung",
+      name: "Küchen-Assistent",
+      description: "Einkaufslisten & Menüplanung",
       icon: "🍽️",
       color: "#f5eaec",
       chatflowId: "26ade53e-ce20-40d7-a7bd-c1435d32a278",
-      flowiseUrl: "http://flowise-tvkk0ssj3mlrvabws2x0n8cp.178.104.67.188.sslip.io/api/v1/prediction/",
-      attachmentUrl: "http://flowise-tvkk0ssj3mlrvabws2x0n8cp.178.104.67.188.sslip.io/api/v1/attachments/"
+      flowiseUrl: "http://flowise-tvkk0ssj3mlrvabws2x0n8cp.178.104.67.188.sslip.io/api/v1/prediction/"
     },
     {
       id: "agent-operativ",
@@ -199,8 +334,7 @@ const CONFIG = {
       icon: "📋",
       color: "#eaf0f5",
       chatflowId: "0138059a-96d0-4462-9deb-c8c91ae22370",
-      flowiseUrl: "http://flowise-tvkk0ssj3mlrvabws2x0n8cp.178.104.67.188.sslip.io/api/v1/prediction/",
-      attachmentUrl: "http://flowise-tvkk0ssj3mlrvabws2x0n8cp.178.104.67.188.sslip.io/api/v1/attachments/"
+      flowiseUrl: "http://flowise-tvkk0ssj3mlrvabws2x0n8cp.178.104.67.188.sslip.io/api/v1/prediction/"
     }
   ],
   flowiseApiKey: ""
@@ -216,19 +350,19 @@ function saveToStorage() {
   localStorage.setItem("mc_sessions_" + state.user, JSON.stringify(state.sessions));
 }
 function loadFromStorage(user) {
-  var raw = localStorage.getItem("mc_sessions_" + user);
+  const raw = localStorage.getItem("mc_sessions_" + user);
   return raw ? JSON.parse(raw) : {};
 }
 
 function doLogin() {
-  var u = document.getElementById("login-user").value.trim();
-  var p = document.getElementById("login-pass").value;
-  var err = document.getElementById("login-error");
+  const u = document.getElementById("login-user").value.trim();
+  const p = document.getElementById("login-pass").value;
+  const err = document.getElementById("login-error");
   if (CONFIG.users[u] && CONFIG.users[u] === p) {
     err.style.display = "none";
     state.user = u;
     state.sessions = loadFromStorage(u);
-    document.getElementById("user-label").textContent = u;
+    document.getElementById("user-label").textContent = "👤 " + u;
     showScreen("app-screen");
     renderAgents();
     renderArchive();
@@ -244,25 +378,28 @@ function doLogout() {
   showScreen("login-screen");
 }
 
-document.getElementById("login-pass").addEventListener("keydown", function(e) {
+document.getElementById("login-pass").addEventListener("keydown", e => {
   if (e.key === "Enter") doLogin();
 });
 
 function showScreen(id) {
-  document.querySelectorAll(".screen").forEach(function(s){ s.classList.remove("active"); });
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
   document.getElementById(id).classList.add("active");
 }
 
 function renderAgents() {
-  var list = document.getElementById("agent-list");
+  const list = document.getElementById("agent-list");
   list.innerHTML = "";
-  CONFIG.agents.forEach(function(agent) {
-    var btn = document.createElement("button");
-    btn.className = "agent-btn" + (state.activeAgent && state.activeAgent.id === agent.id ? " active" : "");
-    btn.innerHTML =
-      '<div class="agent-icon" style="background:' + agent.color + '">' + agent.icon + '</div>' +
-      '<div class="agent-info"><strong>' + agent.name + '</strong><span>' + agent.description + '</span></div>';
-    btn.onclick = function() { selectAgent(agent); };
+  CONFIG.agents.forEach(agent => {
+    const btn = document.createElement("button");
+    btn.className = "agent-btn" + (state.activeAgent?.id === agent.id ? " active" : "");
+    btn.innerHTML = `
+      <div class="agent-icon" style="background:${agent.color}">${agent.icon}</div>
+      <div class="agent-info">
+        <strong>${agent.name}</strong>
+        <span>${agent.description}</span>
+      </div>`;
+    btn.onclick = () => selectAgent(agent);
     list.appendChild(btn);
   });
 }
@@ -277,7 +414,7 @@ function selectAgent(agent) {
 
 function showChatView(agent) {
   document.getElementById("welcome-state").style.display = "none";
-  var cv = document.getElementById("chat-view");
+  const cv = document.getElementById("chat-view");
   cv.style.display = "flex";
   document.getElementById("header-icon").textContent = agent.icon;
   document.getElementById("header-icon").style.background = agent.color;
@@ -293,36 +430,42 @@ function newChat() {
 }
 
 function renderArchive() {
-  var list = document.getElementById("archive-list");
-  var sessions = Object.values(state.sessions).sort(function(a,b){ return b.updatedAt - a.updatedAt; });
-  if (sessions.length === 0) { list.innerHTML = '<p class="archive-empty">Noch keine Chats.</p>'; return; }
+  const list = document.getElementById("archive-list");
+  const sessions = Object.values(state.sessions).sort((a,b) => b.updatedAt - a.updatedAt);
+  if (sessions.length === 0) {
+    list.innerHTML = '<p class="archive-empty">Noch keine Chats.</p>';
+    return;
+  }
   list.innerHTML = "";
-  sessions.forEach(function(sess) {
-    var agent = CONFIG.agents.find(function(a){ return a.id === sess.agentId; });
-    var btn = document.createElement("button");
+  sessions.forEach(sess => {
+    const agent = CONFIG.agents.find(a => a.id === sess.agentId);
+    const btn = document.createElement("button");
     btn.className = "archive-item" + (state.activeSessionId === sess.id ? " active" : "");
-    var date = new Date(sess.updatedAt).toLocaleDateString("de-DE", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" });
-    btn.innerHTML =
-      '<div class="archive-dot" style="background:' + (agent ? agent.color : '#ccc') + ';border:1px solid #ccc;"></div>' +
-      '<div class="archive-info"><strong>' + sess.title + '</strong><span>' + (agent ? agent.icon + ' ' + agent.name : 'Unbekannt') + ' &middot; ' + date + '</span></div>' +
-      '<button class="archive-del-btn" title="Chat loeschen" onclick="event.stopPropagation();deleteSession(\'' + sess.id + '\')">&#x1F5D1;</button>';
-    btn.onclick = function() { loadSession(sess.id); };
+    const date = new Date(sess.updatedAt).toLocaleDateString("de-DE", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" });
+    btn.innerHTML = `
+      <div class="archive-dot" style="background:${agent?.color || '#ccc'}; border: 1px solid #ccc;"></div>
+      <div class="archive-info">
+        <strong>${sess.title}</strong>
+        <span>${agent?.icon || ""} ${agent?.name || "Unbekannt"} · ${date}</span>
+      </div>
+      <button class="archive-del-btn" title="Chat löschen" onclick="event.stopPropagation(); deleteSession('${sess.id}')">🗑</button>`;
+    btn.onclick = () => loadSession(sess.id);
     list.appendChild(btn);
   });
 }
 
 function deleteSession(sessionId) {
-  if (!confirm("Chat wirklich loeschen?")) return;
-  var sess = state.sessions[sessionId];
+  if (!confirm("Chat wirklich löschen?")) return;
+  const sess = state.sessions[sessionId];
   if (sess) {
-    var agent = CONFIG.agents.find(function(a){ return a.id === sess.agentId; });
+    const agent = CONFIG.agents.find(a => a.id === sess.agentId);
     if (agent) {
-      var headers = {};
+      const headers = {};
       if (CONFIG.flowiseApiKey) headers["Authorization"] = "Bearer " + CONFIG.flowiseApiKey;
       fetch(agent.flowiseUrl.replace("/api/v1/prediction/", "/api/v1/chatmessage/") + agent.chatflowId
         + "?chatId=" + encodeURIComponent(sessionId) + "&chatType=INTERNAL",
-        { method: "DELETE", headers: headers }
-      ).catch(function(){});
+        { method: "DELETE", headers }
+      ).catch(() => {});
     }
   }
   delete state.sessions[sessionId];
@@ -338,9 +481,9 @@ function deleteSession(sessionId) {
 }
 
 function loadSession(sessionId) {
-  var sess = state.sessions[sessionId];
+  const sess = state.sessions[sessionId];
   if (!sess) return;
-  var agent = CONFIG.agents.find(function(a){ return a.id === sess.agentId; });
+  const agent = CONFIG.agents.find(a => a.id === sess.agentId);
   if (!agent) return;
   state.activeAgent = agent;
   state.activeSessionId = sessionId;
@@ -351,32 +494,33 @@ function loadSession(sessionId) {
 }
 
 function renderMessages() {
-  var container = document.getElementById("messages");
+  const container = document.getElementById("messages");
   container.innerHTML = "";
   if (!state.activeSessionId) {
-    appendMessage("bot", "Hallo! Ich bin der " + state.activeAgent.name + " von Messerich Catering. " + state.activeAgent.description + ". Wie kann ich dir helfen?", Date.now());
+    const agent = state.activeAgent;
+    appendMessage("bot", `Hallo! Ich bin der ${agent.name} von Messerich Catering. ${agent.description}. Wie kann ich dir helfen?`, Date.now());
     return;
   }
-  var sess = state.sessions[state.activeSessionId];
+  const sess = state.sessions[state.activeSessionId];
   if (!sess) return;
-  sess.messages.forEach(function(m){ appendMessage(m.role, m.content, m.ts); });
+  sess.messages.forEach(m => appendMessage(m.role, m.content, m.ts));
   scrollToBottom();
 }
 
 function appendMessage(role, content, ts) {
-  var container = document.getElementById("messages");
-  var agent = state.activeAgent;
-  var wrap = document.createElement("div");
+  const container = document.getElementById("messages");
+  const agent = state.activeAgent;
+  const wrap = document.createElement("div");
   wrap.className = "msg " + role;
-  var avatar = document.createElement("div");
+  const avatar = document.createElement("div");
   avatar.className = "msg-avatar";
-  avatar.textContent = role === "user" ? "👤" : (agent ? agent.icon : "🤖");
-  if (role === "bot") avatar.style.background = agent ? agent.color : "#f0f2f5";
-  var inner = document.createElement("div");
-  var bubble = document.createElement("div");
+  avatar.textContent = role === "user" ? "👤" : (agent?.icon || "🤖");
+  if (role === "bot") avatar.style.background = agent?.color || "#f0f2f5";
+  const inner = document.createElement("div");
+  const bubble = document.createElement("div");
   bubble.className = "msg-bubble";
   bubble.textContent = content;
-  var time = document.createElement("div");
+  const time = document.createElement("div");
   time.className = "msg-time";
   time.textContent = new Date(ts).toLocaleTimeString("de-DE", { hour:"2-digit", minute:"2-digit" });
   inner.appendChild(bubble);
@@ -388,15 +532,15 @@ function appendMessage(role, content, ts) {
 }
 
 function appendTyping() {
-  var container = document.getElementById("messages");
-  var wrap = document.createElement("div");
+  const container = document.getElementById("messages");
+  const wrap = document.createElement("div");
   wrap.className = "msg bot";
   wrap.id = "typing-indicator";
-  var avatar = document.createElement("div");
+  const avatar = document.createElement("div");
   avatar.className = "msg-avatar";
-  avatar.textContent = state.activeAgent ? state.activeAgent.icon : "🤖";
-  avatar.style.background = state.activeAgent ? state.activeAgent.color : "#f0f2f5";
-  var bubble = document.createElement("div");
+  avatar.textContent = state.activeAgent?.icon || "🤖";
+  avatar.style.background = state.activeAgent?.color || "#f0f2f5";
+  const bubble = document.createElement("div");
   bubble.className = "msg-bubble";
   bubble.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
   wrap.appendChild(avatar);
@@ -406,12 +550,12 @@ function appendTyping() {
 }
 
 function removeTyping() {
-  var el = document.getElementById("typing-indicator");
+  const el = document.getElementById("typing-indicator");
   if (el) el.remove();
 }
 
 function scrollToBottom() {
-  var c = document.getElementById("messages");
+  const c = document.getElementById("messages");
   c.scrollTop = c.scrollHeight;
 }
 
@@ -421,22 +565,46 @@ function fmtSize(b) {
   return (b/1048576).toFixed(1) + " MB";
 }
 
-function handlePdf(input) {
-  var file = input.files[0];
+// PDF HANDLER
+async function handlePdf(input) {
+  const file = input.files[0];
   if (!file) return;
   if (file.type !== "application/pdf") { alert("Bitte nur PDF-Dateien."); return; }
   if (file.size > 20 * 1024 * 1024) { alert("PDF zu gross (max. 20 MB)."); return; }
 
-  state.pendingPdf = {
-    name: file.name,
-    size: fmtSize(file.size),
-    file: file
-  };
-
-  document.getElementById("pdf-name").textContent = file.name;
-  document.getElementById("pdf-size").textContent = fmtSize(file.size);
+  document.getElementById("pdf-name").textContent = "Lese PDF...";
+  document.getElementById("pdf-size").textContent = "";
   document.getElementById("pdf-preview").classList.add("visible");
   document.getElementById("pdf-btn").classList.add("has-file");
+
+  try {
+    const arrayBufferForPdfJs = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBufferForPdfJs }).promise;
+    let fullText = "";
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const tc = await page.getTextContent();
+      fullText += tc.items.map(s => s.str).join(" ") + "\n";
+    }
+    fullText = fullText.trim();
+
+    // File-Objekt direkt speichern fuer spaetere Base64-Konvertierung
+    // ✅ Ansatz B: nur Text speichern, kein File-Objekt noetig
+    state.pendingPdf = {
+      name: file.name,
+      size: fmtSize(file.size),
+      pages: pdf.numPages,
+      text: fullText
+    };
+
+    document.getElementById("pdf-name").textContent = file.name;
+    document.getElementById("pdf-size").textContent = fmtSize(file.size) + " · " + pdf.numPages + " Seite(n)";
+  } catch(err) {
+    alert("PDF konnte nicht gelesen werden: " + err.message);
+    state.pendingPdf = null;
+    document.getElementById("pdf-preview").classList.remove("visible");
+    document.getElementById("pdf-btn").classList.remove("has-file");
+  }
   input.value = "";
 }
 
@@ -447,13 +615,11 @@ function removePdf() {
   document.getElementById("pdf-input").value = "";
 }
 
-// SEND MESSAGE
-// Flowise 2-Schritt Prozess fuer File Upload:
-// 1. POST /api/v1/attachments/{chatflowId}/{chatId}  -> multipart mit "files" + "chatId"
-// 2. POST /api/v1/prediction/{chatflowId}            -> JSON mit "question", "chatId", "uploads" (Response aus Schritt 1)
+// SEND MESSAGE — Ansatz B: PDF.js extrahiert Text clientseitig, direkt als uploads-Array
+// Kein /api/v1/attachments Aufruf → kein CORS-Problem
 async function sendMessage(overrideText) {
-  var input = document.getElementById("msg-input");
-  var text = overrideText !== undefined ? overrideText : input.value.trim();
+  const input = document.getElementById("msg-input");
+  const text = overrideText !== undefined ? overrideText : input.value.trim();
 
   if ((!text && !state.pendingPdf) || state.isLoading || !state.activeAgent) return;
 
@@ -464,10 +630,10 @@ async function sendMessage(overrideText) {
 
   state.isLoading = true;
   document.getElementById("send-btn").disabled = true;
-  var ts = Date.now();
+  const ts = Date.now();
 
   if (!state.activeSessionId) {
-    var sessionId = "sess_" + ts + "_" + Math.random().toString(36).slice(2,7);
+    const sessionId = "sess_" + ts + "_" + Math.random().toString(36).slice(2,7);
     state.activeSessionId = sessionId;
     state.sessions[sessionId] = {
       id: sessionId,
@@ -480,8 +646,8 @@ async function sendMessage(overrideText) {
     document.getElementById("messages").innerHTML = "";
   }
 
-  var displayText = text || (state.pendingPdf ? "📎 " + state.pendingPdf.name : "");
-  var userMsg = { role: "user", content: displayText, ts: ts };
+  const displayText = text || (state.pendingPdf ? "📎 " + state.pendingPdf.name : "");
+  const userMsg = { role: "user", content: displayText, ts };
   state.sessions[state.activeSessionId].messages.push(userMsg);
   state.sessions[state.activeSessionId].updatedAt = ts;
   appendMessage("user", displayText, ts);
@@ -490,59 +656,46 @@ async function sendMessage(overrideText) {
   appendTyping();
 
   try {
-    var agent = state.activeAgent;
-    var sess = state.sessions[state.activeSessionId];
-    var uploads = [];
+    const agent = state.activeAgent;
+    const sess = state.sessions[state.activeSessionId];
+    let res;
+
+    // ✅ Ansatz B: uploads-Array direkt im prediction-Request
+    // Exakt das Format das Flowise erwartet (verifiziert per DevTools):
+    // { data: "<extrahierter Text>", mime: "application/pdf", name: "...", type: "file:full" }
+    const headers = { "Content-Type": "application/json" };
+    if (CONFIG.flowiseApiKey) headers["Authorization"] = "Bearer " + CONFIG.flowiseApiKey;
+
+    const payload = {
+      question: text || "Bitte analysiere das angehaengte PDF.",
+      chatId: state.activeSessionId,
+      overrideConfig: {},
+      streaming: false
+    };
 
     if (state.pendingPdf) {
-      // SCHRITT 1: Datei hochladen an /api/v1/attachments/{chatflowId}/{chatId}
-      var savedFile = state.pendingPdf.file;
-      var savedName = state.pendingPdf.name;
+      payload.uploads = [{
+        data: state.pendingPdf.text,
+        mime: "application/pdf",
+        name: state.pendingPdf.name,
+        type: "file:full"
+      }];
       state.pendingPdf = null;
       removePdf();
-
-      var formData = new FormData();
-      formData.append("files", savedFile, savedName);
-      formData.append("chatId", state.activeSessionId);
-
-      var uploadHeaders = {};
-      if (CONFIG.flowiseApiKey) uploadHeaders["Authorization"] = "Bearer " + CONFIG.flowiseApiKey;
-
-      var uploadRes = await fetch(agent.attachmentUrl + agent.chatflowId + "/" + state.activeSessionId, {
-        method: "POST",
-        headers: uploadHeaders,
-        body: formData
-      });
-
-      if (!uploadRes.ok) throw new Error("Upload fehlgeschlagen: HTTP " + uploadRes.status);
-      uploads = await uploadRes.json();
-      // uploads ist ein Array: [{ name, mimeType, size, content }]
     }
 
-    // SCHRITT 2: Chat-Nachricht senden
-    var chatHeaders = { "Content-Type": "application/json" };
-    if (CONFIG.flowiseApiKey) chatHeaders["Authorization"] = "Bearer " + CONFIG.flowiseApiKey;
-
-    var body = {
-      question: text || "Bitte analysiere das angehaengte PDF.",
-      chatId: state.activeSessionId
-    };
-    if (uploads.length > 0) {
-      body.uploads = uploads;
-    }
-
-    var res = await fetch(agent.flowiseUrl + agent.chatflowId, {
+    res = await fetch(agent.flowiseUrl + agent.chatflowId, {
       method: "POST",
-      headers: chatHeaders,
-      body: JSON.stringify(body)
+      headers,
+      body: JSON.stringify(payload)
     });
 
     if (!res.ok) throw new Error("HTTP " + res.status);
-    var data = await res.json();
-    var answer = data.text || data.answer || data.output || JSON.stringify(data);
+    const data = await res.json();
+    const answer = data.text || data.answer || data.output || JSON.stringify(data);
 
     removeTyping();
-    var botMsg = { role: "bot", content: answer, ts: Date.now() };
+    const botMsg = { role: "bot", content: answer, ts: Date.now() };
     sess.messages.push(botMsg);
     sess.updatedAt = botMsg.ts;
     appendMessage("bot", answer, botMsg.ts);
@@ -550,9 +703,9 @@ async function sendMessage(overrideText) {
 
   } catch (err) {
     removeTyping();
-    var errMsg = {
+    const errMsg = {
       role: "bot",
-      content: "Verbindungsfehler: " + err.message,
+      content: "Verbindungsfehler zum Assistenten.\n\nDetails: " + err.message,
       ts: Date.now()
     };
     state.sessions[state.activeSessionId].messages.push(errMsg);
@@ -569,6 +722,7 @@ document.getElementById("msg-input").addEventListener("input", function() {
   this.style.height = "auto";
   this.style.height = Math.min(this.scrollHeight, 120) + "px";
 });
+
 document.getElementById("msg-input").addEventListener("keydown", function(e) {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 });
