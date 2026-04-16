@@ -517,7 +517,55 @@ function renderMessages() {
   scrollToBottom();
 }
 
-function appendMessage(role, content, ts) {
+  function typewriterMessage(agent, fullText, ts, sess) {
+    var container = document.getElementById("messages");
+    var wrap = document.createElement("div");
+    wrap.className = "msg bot";
+    var avatar = document.createElement("div");
+    avatar.className = "msg-avatar";
+    avatar.textContent = agent ? agent.icon : "\ud83e\udd16";
+    avatar.style.background = agent ? agent.color : "#f0f2f5";
+    var inner = document.createElement("div");
+    var bubble = document.createElement("div");
+    bubble.className = "msg-bubble";
+    var timeEl = document.createElement("div");
+    timeEl.className = "msg-time";
+    timeEl.textContent = new Date(ts).toLocaleTimeString("de-DE", { hour:"2-digit", minute:"2-digit" });
+    inner.appendChild(bubble);
+    inner.appendChild(timeEl);
+    wrap.appendChild(avatar);
+    wrap.appendChild(inner);
+    container.appendChild(wrap);
+    scrollToBottom();
+
+    var chars = Array.from(fullText);
+    var i = 0;
+    var displayed = "";
+    function tick() {
+      if (i >= chars.length) {
+        // Final render with markdown
+        if (typeof marked !== "undefined") {
+          bubble.innerHTML = marked.parse(fullText, { breaks: true });
+          bubble.querySelectorAll("a").forEach(function(a) {
+            a.setAttribute("target","_blank");
+            a.setAttribute("rel","noopener noreferrer");
+          });
+        }
+        return;
+      }
+      // Batch chars for speed
+      var batch = Math.min(3, chars.length - i);
+      for (var b = 0; b < batch; b++) {
+        displayed += chars[i++];
+      }
+      bubble.textContent = displayed;
+      scrollToBottom();
+      setTimeout(tick, 18);
+    }
+    tick();
+  }
+
+  function appendMessage(role, content, ts) {
   var container = document.getElementById("messages");
   var agent = state.activeAgent;
   var wrap = document.createElement("div");
@@ -717,7 +765,7 @@ async function sendMessage(overrideText) {
     var botMsg = { role: "bot", content: fullAnswer, ts: nowTs };
     sess.messages.push(botMsg);
     sess.updatedAt = botMsg.ts;
-    appendMessage("bot", fullAnswer, nowTs);
+    typewriterMessage(agent, fullAnswer, nowTs, sess);
     saveToStorage();
 
   } catch (err) {
