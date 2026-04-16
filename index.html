@@ -701,9 +701,6 @@ async function sendMessage(overrideText) {
       removePdf();
     }
 
-    // Streaming: set streaming:true and read SSE chunks
-    payload.streaming = true;
-
     var res = await fetch(agent.flowiseUrl + agent.chatflowId, {
       method: "POST",
       headers: headers,
@@ -712,88 +709,15 @@ async function sendMessage(overrideText) {
 
     if (!res.ok) throw new Error("HTTP " + res.status);
 
+    var data = await res.json();
+    var fullAnswer = data.text || data.answer || data.output || JSON.stringify(data);
+
     removeTyping();
-
-    // Create streaming bubble
     var nowTs = Date.now();
-    var streamWrap = document.createElement("div");
-    streamWrap.className = "msg bot";
-    var streamAvatar = document.createElement("div");
-    streamAvatar.className = "msg-avatar";
-    streamAvatar.textContent = agent ? agent.icon : "\ud83e\udd16";
-    streamAvatar.style.background = agent ? agent.color : "#f0f2f5";
-    var streamInner = document.createElement("div");
-    var streamBubble = document.createElement("div");
-    streamBubble.className = "msg-bubble";
-    var streamTime = document.createElement("div");
-    streamTime.className = "msg-time";
-    streamTime.textContent = new Date(nowTs).toLocaleTimeString("de-DE", { hour:"2-digit", minute:"2-digit" });
-    streamInner.appendChild(streamBubble);
-    streamInner.appendChild(streamTime);
-    streamWrap.appendChild(streamAvatar);
-    streamWrap.appendChild(streamInner);
-    document.getElementById("messages").appendChild(streamWrap);
-    scrollToBottom();
-
-    var reader = res.body.getReader();
-    var decoder = new TextDecoder();
-    var fullAnswer = "";
-    var buffer = "";
-
-    while (true) {
-      var result = await reader.read();
-      if (result.done) break;
-      buffer += decoder.decode(result.value, { stream: true });
-      var lines = buffer.split("\n");
-      buffer = lines.pop(); // keep incomplete line
-      for (var li = 0; li < lines.length; li++) {
-        var line = lines[li].trim();
-        if (!line || line === "data: [DONE]") continue;
-        if (line.startsWith("data: ")) {
-          try {
-            var chunk = JSON.parse(line.slice(6));
-            var token = chunk.token || chunk.text || chunk.answer || "";
-            if (token) {
-              fullAnswer += token;
-              if (typeof marked !== 'undefined') {
-                streamBubble.innerHTML = marked.parse(fullAnswer, { breaks: true });
-                streamBubble.querySelectorAll('a').forEach(function(a) {
-                  a.setAttribute('target','_blank');
-                  a.setAttribute('rel','noopener noreferrer');
-                });
-              } else {
-                streamBubble.textContent = fullAnswer;
-              }
-              scrollToBottom();
-            }
-          } catch(e) {}
-        }
-      }
-    }
-
-    // If streaming gave nothing, try parsing as JSON
-    if (!fullAnswer) {
-      try {
-        var jsonData = JSON.parse(buffer || "{}");
-        fullAnswer = jsonData.text || jsonData.answer || jsonData.output || "";
-      } catch(e) {}
-    }
-    if (!fullAnswer) fullAnswer = "(Keine Antwort erhalten)";
-
-    // Final render
-    if (typeof marked !== 'undefined') {
-      streamBubble.innerHTML = marked.parse(fullAnswer, { breaks: true });
-      streamBubble.querySelectorAll('a').forEach(function(a) {
-        a.setAttribute('target','_blank');
-        a.setAttribute('rel','noopener noreferrer');
-      });
-    } else {
-      streamBubble.textContent = fullAnswer;
-    }
-
     var botMsg = { role: "bot", content: fullAnswer, ts: nowTs };
     sess.messages.push(botMsg);
     sess.updatedAt = botMsg.ts;
+    appendMessage("bot", fullAnswer, nowTs);
     saveToStorage();
 
   } catch (err) {
