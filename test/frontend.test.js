@@ -1,0 +1,128 @@
+// DOM-Test des Frontends mit jsdom: echtes index.html + app.js, Supabase/fetch gemockt.
+// Prüft Quick-Reply-Rendering (Gruppen, Auswahl, Sammel-Senden), Read-only für Empfänger
+// und den Häkchen-Status („✓ Geteilt") im Teilen-Dialog.
+import { test, before } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { JSDOM } from 'jsdom';
+
+const ME = 'aaaaaaaa-0000-4000-8000-000000000001';
+const BOB = 'bbbbbbbb-0000-4000-8000-000000000002';
+const RESULT = {
+  id: '11111111-0000-4000-8000-000000000001', owner_id: ME, flow_type: 'operativ', title: 'Function_Testveranstaltung.pdf',
+  created_at: '2026-09-25T09:00:00Z',
+  output_data: { chat_id: 'c1', messages: [
+    { role: 'user', content: '📎 Function_Testveranstaltung.pdf', ts: '2026-09-25T09:00:00Z' },
+    { role: 'bot', content: '## ❓ 2 offene Punkte\n\n1. **14er Schale – welche Variante?**\n2. **Servietten – welche Farbe?**', ts: '2026-09-25T09:01:00Z',
+      quick_replies: [
+        { question: '14er Schale – welche Variante?', options: ['khaki (Row 22)', 'mint (Row 23)', 'schwarz (Row 24)'] },
+        { question: 'Servietten – welche Farbe?', options: ['grau (Row 78)', 'schwarz (Row 79)'] },
+      ] },
+  ] },
+};
+const SHARED = { ...RESULT, id: '22222222-0000-4000-8000-000000000002', owner_id: BOB, title: 'Von Bob geteilt' };
+
+let dom, win, doc, sent, authCb;
+function makeSupabaseMock() {
+  const table = (name) => {
+    const q = { _f: {}, select() { return q; }, order() { return q; }, eq(k, v) { q._f[k] = v; return q; },
+      insert(row) { q._ins = row; return q; }, single() { return q; },
+      then(res) {
+        if (name === 'results') return res({ data: [RESULT, SHARED], error: null });
+        if (name === 'result_shares') {
+          if (q._ins) { win.__shares.push({ ...q._ins, created_at: new Date().toISOString() }); return res({ data: win.__shares.at(-1), error: null }); }
+          return res({ data: [...win.__shares], error: null });
+        }
+        return res({ data: [], error: null });
+      } };
+    return q;
+  };
+  return { createClient: () => ({
+    auth: { onAuthStateChange: (cb) => { authCb = cb; }, getSession: async () => ({ data: { session: { access_token: 'tok', user: { id: ME } } } }), signOut: async () => {}, signInWithPassword: async () => ({ error: null }) },
+    from: (name) => table(name),
+    rpc: async () => ({ data: [{ id: ME, email: 'me@test.local', display_name: 'Ich' }, { id: BOB, email: 'bob@test.local', display_name: 'Bob' }], error: null }),
+  }) };
+}
+
+before(async () => {
+  const html = fs.readFileSync(path.resolve('public/index.html'), 'utf8').replace(/<script src="[^"]*"><\/script>\s*/g, '');
+  dom = new JSDOM(html, { runScripts: 'outside-only', url: 'https://portal.test/' });
+  win = dom.window; doc = win.document;
+  win.__shares = [{ result_id: SHARED.id, shared_with_id: ME, shared_by_id: BOB, created_at: '2026-09-25T09:02:00Z' }];
+  win.PORTAL_CONFIG = { supabaseUrl: 'https://sb.test', supabaseAnonKey: 'anon', flows: [
+    { type: 'kueche', name: 'Küchen-Assistent', description: 'Einkauf', icon: '🍽️', color: '#f5eaec' },
+    { type: 'operativ', name: 'Operativer Assistent', description: 'Packliste', icon: '📋', color: '#eaf0f5' } ] };
+  win.supabase = makeSupabaseMock();
+  win.marked = { parse: (t) => '<p>' + t.replace(/</g, '&lt;') + '</p>' };
+  sent = [];
+  win.fetch = async (url, opts) => { sent.push({ url, body: JSON.parse(opts.body) }); return { status: 200, ok: true, json: async () => ({ resultId: RESULT.id, answer: 'Danke, übernommen.', quickReplies: null, result: RESULT }) }; };
+  win.confirm = () => true;
+  win.eval(fs.readFileSync(path.resolve('public/js/app.js'), 'utf8'));
+  authCb('SIGNED_IN', { user: { id: ME, email: 'me@test.local' } });
+  await new Promise((r) => setTimeout(r, 50));
+});
+
+test('Verlauf zeigt eigenes und geteiltes Ergebnis mit Badges', () => {
+  const items = [...doc.querySelectorAll('.archive-item')];
+  assert.equal(items.length, 2);
+  assert.ok(items.some((i) => i.textContent.includes('von Bob')), 'Badge "von Bob" fehlt');
+  assert.equal(doc.querySelectorAll('.archive-item .archive-del-btn').length, 1, 'Löschen nur beim eigenen Ergebnis');
+});
+
+test('Quick Replies: Gruppen mit Fragen und Optionen werden als Buttons gerendert', () => {
+  [...doc.querySelectorAll('.archive-item')].find((i) => i.textContent.includes('Function_Testveranstaltung')).click();
+  const groups = doc.querySelectorAll('.quick-replies .quick-group');
+  assert.equal(groups.length, 2);
+  assert.equal(groups[0].querySelector('.quick-question').textContent, '14er Schale – welche Variante?');
+  assert.equal(groups[0].querySelectorAll('.quick-reply').length, 3);
+  assert.equal(groups[1].querySelectorAll('.quick-reply').length, 2);
+  assert.doesNotMatch(doc.getElementById('messages').textContent, /quickreplies/);
+  const send = doc.querySelector('.quick-send');
+  assert.ok(send && send.disabled, 'Senden-Button initial deaktiviert');
+  assert.equal(doc.getElementById('input-area').hidden, false, 'Eingabefeld für Owner sichtbar');
+});
+
+test('Klick markiert Option, Sammel-Senden schickt „Meine Antworten" mit resultId', async () => {
+  const groups = doc.querySelectorAll('.quick-replies .quick-group');
+  groups[0].querySelectorAll('.quick-reply')[0].click();
+  groups[1].querySelectorAll('.quick-reply')[1].click();
+  assert.ok(groups[0].querySelectorAll('.quick-reply')[0].classList.contains('selected'));
+  const send = doc.querySelector('.quick-send');
+  assert.equal(send.disabled, false);
+  assert.match(send.textContent, /2\/2/);
+  send.click();
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].url, '/api/flow/operativ');
+  assert.equal(sent[0].body.resultId, RESULT.id);
+  assert.equal(sent[0].body.question, 'Meine Antworten:\n- 14er Schale – welche Variante? → khaki (Row 22)\n- Servietten – welche Farbe? → schwarz (Row 79)');
+  assert.equal(doc.querySelectorAll('.quick-replies').length, 0, 'alte Buttons nach dem Senden entfernt');
+});
+
+test('Empfänger eines geteilten Ergebnisses: keine Buttons, kein Eingabefeld, Banner', () => {
+  [...doc.querySelectorAll('.archive-item')].find((i) => i.textContent.includes('Von Bob geteilt')).click();
+  assert.equal(doc.querySelectorAll('.quick-replies').length, 0);
+  assert.equal(doc.getElementById('input-area').hidden, true);
+  assert.match(doc.getElementById('readonly-banner').textContent, /Geteilt von Bob.*nur Lesen/);
+  assert.equal(doc.getElementById('share-btn').hidden, true);
+});
+
+test('Teilen-Dialog: Button „Teilen" → nach Klick „✓ Geteilt" (deaktiviert) und Badge im Verlauf', async () => {
+  [...doc.querySelectorAll('.archive-item')].find((i) => i.textContent.includes('Function_Testveranstaltung')).click();
+  assert.equal(doc.getElementById('share-btn').hidden, false);
+  doc.getElementById('share-btn').click();
+  assert.ok(doc.getElementById('share-modal').classList.contains('open'));
+  const rows = doc.querySelectorAll('.share-row');
+  assert.equal(rows.length, 1, 'nur Bob, nicht ich selbst');
+  const btn = rows[0].querySelector('button');
+  assert.equal(btn.textContent, 'Teilen'); assert.equal(btn.disabled, false);
+  btn.click();
+  await new Promise((r) => setTimeout(r, 30));
+  const btn2 = doc.querySelector('.share-row button');
+  assert.equal(btn2.textContent, '✓ Geteilt'); assert.equal(btn2.disabled, true);
+  doc.getElementById('share-close').click();
+  assert.ok(!doc.getElementById('share-modal').classList.contains('open'));
+  const own = [...doc.querySelectorAll('.archive-item')].find((i) => i.textContent.includes('Function_Testveranstaltung'));
+  assert.match(own.textContent, /geteilt mit 1/);
+});
