@@ -79,6 +79,9 @@ const flowiseMock = http.createServer(async (req, res) => {
       + JSON.stringify([{ question: '14er Schale – welche Variante?', options: ['khaki (Row 22)', 'mint (Row 23)', 'schwarz (Row 24)'] }, { question: 'Servietten – welche Farbe?', options: ['grau (Row 78)', 'schwarz (Row 79)'] }, { question: 'kaputt', options: ['nur eine'] }])
       + '\n```';
   }
+  if (/summarytest/.test(body.question)) {
+    text = '## 🔍 Validierung\n\n### ❓ 1 offene Punkte\n1. [A] **Bier – Aufteilung?**\n\n### ✅ 1 Artikel klar zugeordnet\n1. Biertulpe → GBP Row 53 | 220 | ok\n\n## 📋 Kurzfassung\n\nValidierung fertig – 1 Frage unten per Klick.\n✅ 1 Artikel eindeutig zugeordnet.\n\n```quickreplies\n[{"question":"Bier – Aufteilung?","options":["70/30 → 129 + 55","andere Aufteilung (Freitext)"]}]\n```';
+  }
   if (/guardtest/.test(body.question)) {
     text = '## 🔍 Validierung\n\n### ❓ 1 offene Punkte\n\n1. [A] **Bier – Aufteilung?** Row 69 / 71\n\n### ⚠️ 0 Annahmen\n\n🔁 V1/V2/V3-Check: 0\n\n### ✅ 3 Artikel klar zugeordnet\n\n'
       + '1. Biertulpe → GBP Row 53 | 220 | 1,0 × 220\n2. Radeberger Flasche → Getränke Row 69 | nach Klärung ❓1 | Bier\n3. Kellnermesser → Bar-I Row 7 | 1 | Wein\n\n```quickreplies\n[{"question":"Bier – Aufteilung?","options":["70/30 → 129 + 55","andere Aufteilung (Freitext)"]}]\n```';
@@ -119,6 +122,35 @@ test('healthz und config.js ohne Geheimnisse', async () => {
   assert.equal(c.status, 200);
   assert.match(c.text, /supabaseAnonKey/);
   assert.doesNotMatch(c.text, /cf-kueche|cf-operativ|key-kueche|key-operativ|127\.0\.0\.1:\d+\/api/);
+});
+
+test('Version: Header auf jeder Antwort, versionierte Asset-Pfade in index.html, keine Caches für index', async () => {
+  const r = await fetch(base + '/healthz'); const v = r.headers.get('x-portal-version');
+  assert.ok(v && v.length >= 4);
+  assert.equal((await r.json()).version, v);
+  const idx = await fetch(base + '/'); const html = await idx.text();
+  assert.match(html, new RegExp(`src="js/app\\.js\\?v=${v}"`));
+  assert.match(html, new RegExp(`href="css/style\\.css\\?v=${v}"`));
+  assert.equal(idx.headers.get('cache-control'), 'no-cache');
+  const js = await fetch(base + '/js/app.js?v=' + v);
+  assert.match(js.headers.get('cache-control'), /max-age=31536000/);
+  const cfg = await (await fetch(base + '/config.js')).text();
+  assert.match(cfg, new RegExp(`"version":"${v}"`));
+});
+
+test('Kurzfassung (operativ) wird als summary geliefert und gespeichert; Volltext bleibt content', async () => {
+  const r = await api('/api/flow/operativ', { method: 'POST', body: { question: 'summarytest' }, token: tokenFor(ALICE) });
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.json.summary, 'Validierung fertig – 1 Frage unten per Klick.\n✅ 1 Artikel eindeutig zugeordnet.');
+  assert.match(r.json.answer, /### ✅ 1 Artikel klar zugeordnet/);
+  assert.match(r.json.answer, /## 📋 Kurzfassung/);
+  assert.doesNotMatch(r.json.answer, /quickreplies/);
+  const last = r.json.result.output_data.messages.at(-1);
+  assert.equal(last.summary, r.json.summary);
+  assert.match(last.content, /### ❓ 1 offene Punkte/);
+  const k = await api('/api/flow/kueche', { method: 'POST', body: { question: 'summarytest' }, token: tokenFor(ALICE) });
+  assert.equal(k.json.summary, null);
+  seen.flowise.length = 0; seen.rest.length = 0;
 });
 
 test('API ohne / mit ungültigem Token → 401', async () => {

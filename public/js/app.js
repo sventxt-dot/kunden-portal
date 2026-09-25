@@ -53,6 +53,17 @@
     toastTimer = setTimeout(() => { t.className = 'toast'; }, isError ? 5000 : 2500);
   }
 
+  // Veralteter Tab? Antwortet der Server mit einer anderen Version als der geladenen app.js,
+  // wird neu geladen – sonst rendert alter Code neue Datenformate falsch („[object Object]“).
+  const LOADED_VERSION = CFG.version || '';
+  function checkVersion(res) {
+    const v = res.headers.get('X-Portal-Version');
+    if (v && LOADED_VERSION && v !== LOADED_VERSION && !state.isLoading) {
+      toast('Neue Portal-Version – Seite wird neu geladen …');
+      setTimeout(() => window.location.reload(), 1200);
+    }
+  }
+
   async function apiFetch(path, options = {}) {
     const { data: { session } } = await sb.auth.getSession();
     if (!session) throw new Error('Nicht angemeldet.');
@@ -60,6 +71,7 @@
       ...options,
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token, ...(options.headers || {}) },
     });
+    checkVersion(res);
     let body = null;
     try { body = await res.json(); } catch { /* keine JSON-Antwort */ }
     if (res.status === 401) { await sb.auth.signOut(); throw new Error('Sitzung abgelaufen. Bitte neu anmelden.'); }
@@ -261,7 +273,7 @@
     msgs.forEach((m, i) => {
       if (m.role === 'bot') {
         const { text, groups } = quickRepliesFor(m);
-        appendMessage('bot', text, m.ts, null, i === msgs.length - 1 ? groups : null);
+        appendMessage('bot', text, m.ts, null, i === msgs.length - 1 ? groups : null, m.summary || null);
       } else {
         appendMessage(m.role, m.content, m.ts, m.attachment, null);
       }
@@ -431,11 +443,25 @@
     return { wrap, bubble };
   }
 
-  function appendMessage(role, content, ts, attachment, quickReplies) {
+  // Bot-Blase: Kurzfassung (falls vorhanden) sichtbar, Volltext hinter „Details einblenden“
+  function fillBotBubble(bubble, content, summary) {
+    if (!summary) {
+      bubble.innerHTML = renderMd(content);
+    } else {
+      bubble.innerHTML = '<div class="msg-summary">' + renderMd(summary) + '</div>'
+        + '<button type="button" class="details-toggle">Details einblenden ▾</button>'
+        + '<div class="msg-details" hidden>' + renderMd(content) + '</div>';
+      const btn = bubble.querySelector('.details-toggle');
+      const det = bubble.querySelector('.msg-details');
+      btn.addEventListener('click', () => { det.hidden = !det.hidden; btn.textContent = det.hidden ? 'Details einblenden ▾' : 'Details ausblenden ▴'; });
+    }
+    bubble.querySelectorAll('a').forEach((a) => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
+  }
+
+  function appendMessage(role, content, ts, attachment, quickReplies, summary) {
     const { wrap, bubble } = bubbleFor(role, ts);
     if (role === 'bot') {
-      bubble.innerHTML = renderMd(content);
-      bubble.querySelectorAll('a').forEach((a) => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
+      fillBotBubble(bubble, content, summary);
     } else {
       bubble.textContent = content;
       if (attachment?.name) {
@@ -449,14 +475,13 @@
     scrollToBottom();
   }
 
-  function typewriterMessage(fullText, ts, quickReplies) {
+  function typewriterMessage(fullText, ts, quickReplies, summary) {
     const { wrap, bubble } = bubbleFor('bot', ts);
-    const chars = Array.from(fullText);
+    const chars = Array.from(summary || fullText);
     let i = 0, shown = '';
     (function tick() {
       if (i >= chars.length) {
-        bubble.innerHTML = renderMd(fullText);
-        bubble.querySelectorAll('a').forEach((a) => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
+        fillBotBubble(bubble, fullText, summary);
         renderQuickReplies(wrap, quickReplies);
         scrollToBottom();
         return;
@@ -525,7 +550,12 @@
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
 
   async function sendMessage(overrideText) {
-    const text = overrideText !== undefined ? String(overrideText).trim() : input.value.trim();
+    if (overrideText !== undefined && typeof overrideText !== 'string') {
+      console.error('sendMessage: erwartet String, bekam', overrideText);
+      toast('Interner Fehler beim Senden der Auswahl. Bitte Seite neu laden.', true);
+      return;
+    }
+    const text = overrideText !== undefined ? overrideText.trim() : input.value.trim();
     const flow = state.activeFlow;
     if ((!text && !state.pendingPdf) || state.isLoading || !flow) return;
     if (state.activeResult && !isOwner(state.activeResult)) { toast('Geteilte Ergebnisse sind schreibgeschützt.', true); return; }
@@ -558,7 +588,7 @@
       renderAgents();
       renderArchive();
       const shown = quickRepliesFor({ content: data.answer, quick_replies: data.quickReplies });
-      typewriterMessage(shown.text, new Date().toISOString(), shown.groups);
+      typewriterMessage(shown.text, new Date().toISOString(), shown.groups, data.summary || null);
     } catch (err) {
       removeTyping();
       appendMessage('bot', 'Der Assistent konnte nicht antworten.\n\nDetails: ' + err.message, new Date().toISOString());

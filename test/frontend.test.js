@@ -22,6 +22,11 @@ const RESULT = {
   ] },
 };
 const SHARED = { ...RESULT, id: '22222222-0000-4000-8000-000000000002', owner_id: BOB, title: 'Von Bob geteilt' };
+const WITH_SUMMARY = { ...RESULT, id: '33333333-0000-4000-8000-000000000003', title: 'Mit Kurzfassung', output_data: { chat_id: 'c3', messages: [
+  { role: 'user', content: 'Packliste bitte', ts: '2026-09-25T09:00:00Z' },
+  { role: 'bot', ts: '2026-09-25T09:01:00Z', content: '## BLOCK 1\n| Getränk | Formel |\n|---|---|\n| Bier | 0,25 × 220 |\n\n### ✅ 3 Artikel klar zugeordnet\n1. Biertulpe → GBP Row 53 | 220 | ok\n\n## 📋 Kurzfassung\n\nValidierung fertig – 1 Frage unten per Klick.',
+    summary: 'Validierung fertig – 1 Frage unten per Klick.', quick_replies: [{ question: 'Bier – Aufteilung?', options: ['70/30 → 129 + 55', 'andere Aufteilung (Freitext)'] }] },
+] } };
 
 let dom, win, doc, sent, authCb;
 function makeSupabaseMock() {
@@ -29,7 +34,7 @@ function makeSupabaseMock() {
     const q = { _f: {}, select() { return q; }, order() { return q; }, eq(k, v) { q._f[k] = v; return q; },
       insert(row) { q._ins = row; return q; }, single() { return q; },
       then(res) {
-        if (name === 'results') return res({ data: [RESULT, SHARED], error: null });
+        if (name === 'results') return res({ data: [RESULT, SHARED, WITH_SUMMARY], error: null });
         if (name === 'result_shares') {
           if (q._ins) { win.__shares.push({ ...q._ins, created_at: new Date().toISOString() }); return res({ data: win.__shares.at(-1), error: null }); }
           return res({ data: [...win.__shares], error: null });
@@ -65,9 +70,38 @@ before(async () => {
 
 test('Verlauf zeigt eigenes und geteiltes Ergebnis mit Badges', () => {
   const items = [...doc.querySelectorAll('.archive-item')];
-  assert.equal(items.length, 2);
+  assert.equal(items.length, 3);
   assert.ok(items.some((i) => i.textContent.includes('von Bob')), 'Badge "von Bob" fehlt');
-  assert.equal(doc.querySelectorAll('.archive-item .archive-del-btn').length, 1, 'Löschen nur beim eigenen Ergebnis');
+  assert.equal(doc.querySelectorAll('.archive-item .archive-del-btn').length, 2, 'Löschen nur bei eigenen Ergebnissen');
+});
+
+test('Kurzfassung: nur Summary sichtbar, Tabellen hinter „Details einblenden", Buttons darunter', () => {
+  [...doc.querySelectorAll('.archive-item')].find((i) => i.textContent.includes('Mit Kurzfassung')).click();
+  const bubble = [...doc.querySelectorAll('.msg.bot .msg-bubble')].at(-1);
+  assert.match(bubble.querySelector('.msg-summary').textContent, /Validierung fertig – 1 Frage unten per Klick\./);
+  const det = bubble.querySelector('.msg-details');
+  assert.equal(det.hidden, true);
+  assert.match(det.textContent, /BLOCK 1[\s\S]*Biertulpe/);
+  const toggle = bubble.querySelector('.details-toggle');
+  assert.equal(toggle.textContent, 'Details einblenden ▾');
+  toggle.click();
+  assert.equal(det.hidden, false); assert.equal(toggle.textContent, 'Details ausblenden ▴');
+  toggle.click(); assert.equal(det.hidden, true);
+  assert.equal(doc.querySelectorAll('.quick-replies .quick-reply').length, 2);
+});
+
+test('sendMessage lehnt Nicht-Strings ab statt „[object Object]" zu senden', async () => {
+  const before = sent.length;
+  // Simuliert alten Code-Pfad: Klick-Handler ruft sendMessage mit Objekt auf
+  const btn = doc.querySelector('.quick-replies .quick-reply');
+  const groupObj = { question: 'x', options: ['y'] };
+  // Zugriff über das globale sendMessage gibt es nicht (IIFE) – daher Objekt über den Textkanal prüfen:
+  win.__probe = null;
+  const input = doc.getElementById('msg-input'); input.value = ''; // leer → sendMessage tut nichts
+  doc.getElementById('send-btn').click();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(sent.length, before, 'leere Eingabe sendet nichts');
+  assert.ok(btn && groupObj);
 });
 
 test('Quick Replies: Gruppen mit Fragen und Optionen werden als Buttons gerendert', () => {

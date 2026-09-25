@@ -12,6 +12,7 @@ import { config } from '../lib/config.js';
 import { supabaseForUser } from '../lib/supabase.js';
 import { predict, FlowiseError } from '../lib/flowise.js';
 import { enforceValidation, followUpNote } from '../lib/validationGuard.js';
+import { splitOperatorSummary } from '../lib/summary.js';
 
 const router = Router();
 
@@ -71,6 +72,7 @@ router.post('/:type', async (req, res, next) => {
     let { answer } = flowiseResult;
     const { quickReplies } = flowiseResult;
     let safetyNet = null;
+    let summary = null;
     if (flow.type === 'operativ') {
       const guarded = enforceValidation(answer);
       if (guarded.moved.length) {
@@ -78,6 +80,9 @@ router.post('/:type', async (req, res, next) => {
         safetyNet = { moved: guarded.moved.map(({ article, reasons }) => ({ article, reasons })), at: new Date().toISOString() };
         console.warn('[guard] operativ: %d Zeile(n) aus ✅ nach ❓ verschoben: %s', guarded.moved.length, guarded.moved.map((m) => m.article).join(', '));
       }
+      // Kurzfassung für den Operator (Prompt Abschnitt 21) – Details bleiben im gespeicherten Volltext
+      const split = splitOperatorSummary(answer, safetyNet);
+      summary = split.summary;
     }
 
     const now = new Date().toISOString();
@@ -93,6 +98,7 @@ router.post('/:type', async (req, res, next) => {
       role: 'bot', content: answer, ts: new Date().toISOString(),
       ...(quickReplies.length ? { quick_replies: quickReplies } : {}),
       ...(safetyNet ? { safety_net: safetyNet } : {}),
+      ...(summary ? { summary } : {}),
     };
 
     let row;
@@ -115,7 +121,7 @@ router.post('/:type', async (req, res, next) => {
       row = data;
     }
 
-    return res.json({ resultId: row.id, answer, quickReplies: botMessage.quick_replies || null, safetyNet, result: row });
+    return res.json({ resultId: row.id, answer, summary, quickReplies: botMessage.quick_replies || null, safetyNet, result: row });
   } catch (err) {
     if (err instanceof FlowiseError) {
       console.error('[flow] Flowise-Fehler:', err.message, err.detail || '');

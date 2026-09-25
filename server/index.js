@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { config, assertConfig, publicConfig } from './lib/config.js';
 import { requireAuth } from './lib/auth.js';
@@ -11,27 +12,45 @@ assertConfig();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, '..', 'public');
 
+// Build-Version: Coolify setzt SOURCE_COMMIT; sonst Startzeit. Steuert Cache-Busting und
+// erkennt veraltete Browser-Tabs (alte app.js gegen neuen Server → „[object Object]“-Bug).
+export const VERSION = (process.env.SOURCE_COMMIT || '').slice(0, 12) || `dev-${Date.now().toString(36)}`;
+
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 1); // hinter Traefik/Coolify
 app.use(express.json({ limit: '25mb' })); // extrahierter PDF-Text kann groß sein
+app.use((_req, res, next) => { res.set('X-Portal-Version', VERSION); next(); });
 
-app.get('/healthz', (_req, res) => res.json({ ok: true }));
+app.get('/healthz', (_req, res) => res.json({ ok: true, version: VERSION }));
 
-// Laufzeit-Konfiguration für den Browser: nur Supabase-URL, anon key, Flow-Anzeige.
+// Laufzeit-Konfiguration für den Browser: nur Supabase-URL, anon key, Flow-Anzeige, Version.
 app.get('/config.js', (_req, res) => {
   res.type('application/javascript');
   res.set('Cache-Control', 'no-store');
-  res.send(`window.PORTAL_CONFIG = ${JSON.stringify(publicConfig())};`);
+  res.send(`window.PORTAL_CONFIG = ${JSON.stringify({ ...publicConfig(), version: VERSION })};`);
 });
+
+// index.html mit versionierten Asset-Pfaden ausliefern (js/app.js?v=…), niemals cachen.
+const indexTemplate = fs.readFileSync(path.join(publicDir, 'index.html'), 'utf8');
+const indexHtml = indexTemplate.replace(/(href|src)="((?:css|js)\/[^"?]+)"/g, `$1="$2?v=${VERSION}"`);
+const sendIndex = (_req, res) => { res.set('Cache-Control', 'no-cache'); res.type('html').send(indexHtml); };
+app.get(['/', '/index.html'], sendIndex);
 
 app.use('/api', requireAuth);
 app.use('/api/flow', flowRouter);
 app.use('/api/results', resultsRouter);
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Unbekannter Endpunkt.' }));
 
-app.use(express.static(publicDir, { index: 'index.html', extensions: ['html'] }));
-app.get('*', (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));
+app.use(express.static(publicDir, {
+  index: false,
+  extensions: ['html'],
+  setHeaders: (res, filePath) => {
+    // versionierte Assets dürfen lange gecacht werden; ohne ?v= kurz
+    if (/\.(js|css)$/.test(filePath)) res.set('Cache-Control', 'public, max-age=31536000, immutable');
+  },
+}));
+app.get('*', sendIndex);
 
 // Zentraler Fehler-Handler: Details nur ins Log, nie an den Client.
 // eslint-disable-next-line no-unused-vars
