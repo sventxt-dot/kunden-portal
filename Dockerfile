@@ -1,5 +1,13 @@
-FROM nginx:alpine
-COPY index.html /usr/share/nginx/html/index.html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY htpasswd /etc/nginx/.htpasswd
+FROM node:20-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+COPY server ./server
+COPY public ./public
+
+# Coolify setzt PORT (aktuell 80); der Server liest process.env.PORT.
 EXPOSE 80
+CMD ["node", "server/index.js"]

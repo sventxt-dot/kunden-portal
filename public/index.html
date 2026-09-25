@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Messerich Catering &#8212; Assistenten</title>
+<link rel="icon" href="img/logo.jpg" />
+<link rel="stylesheet" href="css/style.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="/config.js"></script>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen" class="screen active">
+  <div class="login-card">
+    <img class="login-logo" src="img/logo.jpg" alt="Messerich Catering" />
+    <div class="login-divider"></div>
+    <h2>Assistenten-Portal</h2>
+    <form class="login-fields" id="login-form" autocomplete="on" novalidate>
+      <input type="email" id="login-email" placeholder="E-Mail" autocomplete="username" required />
+      <input type="password" id="login-pass" placeholder="Passwort" autocomplete="current-password" required />
+      <div class="login-error" id="login-error"></div>
+      <button type="submit" id="login-btn">Anmelden</button>
+    </form>
+    <p class="login-hint">Konten werden zentral angelegt. Kein Zugang? Bitte an die Verwaltung wenden.</p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app-screen" class="screen">
+  <aside class="sidebar">
+    <div class="sidebar-logo-wrap">
+      <img class="sidebar-logo" src="img/logo.jpg" alt="Messerich Catering" />
+    </div>
+
+    <div class="section-label">Assistenten</div>
+    <div id="agent-list"></div>
+
+    <div class="section-label history-label">
+      <span>Verlauf</span>
+      <select id="history-filter" class="history-filter" aria-label="Verlauf filtern">
+        <option value="all">Alle</option>
+        <option value="mine">Meine</option>
+        <option value="shared">Mit mir geteilt</option>
+      </select>
+    </div>
+    <div class="archive-wrap">
+      <div id="archive-list"><p class="archive-empty">Lade Verlauf&#8230;</p></div>
+    </div>
+
+    <div class="sidebar-footer">
+      <span id="user-label" title="">&#128100;</span>
+      <button class="logout-btn" id="logout-btn">Abmelden</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="welcome-state" id="welcome-state">
+      <img class="welcome-logo" src="img/logo.jpg" alt="" />
+      <h2>Willkommen!</h2>
+      <p>W&#228;hle links einen Assistenten f&#252;r einen neuen Chat oder &#246;ffne ein Ergebnis aus dem Verlauf.</p>
+    </div>
+
+    <div id="chat-view" class="chat-view">
+      <div class="chat-header">
+        <div class="chat-header-icon" id="header-icon"></div>
+        <div class="chat-header-info">
+          <h3 id="header-name"></h3>
+          <span id="header-desc"></span>
+        </div>
+        <div class="chat-header-actions">
+          <button class="share-btn" id="share-btn" title="Ergebnis mit Kollegen teilen">&#128279; Teilen</button>
+          <button class="new-chat-btn" id="new-chat-btn">+ Neuer Chat</button>
+        </div>
+      </div>
+      <div class="readonly-banner" id="readonly-banner"></div>
+      <div class="messages" id="messages"></div>
+      <div class="input-area" id="input-area">
+        <div class="pdf-preview" id="pdf-preview">
+          <span class="pdf-preview-name" id="pdf-name"></span>
+          <span class="pdf-preview-size" id="pdf-size"></span>
+          <button class="pdf-remove" id="pdf-remove" title="Entfernen">&#10005;</button>
+        </div>
+        <div class="input-row">
+          <input type="file" id="pdf-input" accept="application/pdf" style="display:none" />
+          <button class="pdf-btn" id="pdf-btn" title="PDF anh&#228;ngen">&#128206;</button>
+          <textarea id="msg-input" rows="1" placeholder="Nachricht eingeben&#8230;"></textarea>
+          <button class="send-btn" id="send-btn" title="Senden">&#10148;</button>
+        </div>
+        <div class="input-hint">Enter zum Senden &middot; Shift+Enter neue Zeile &middot; &#128206; PDF anh&#228;ngen</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- TEILEN -->
+<div class="modal-backdrop" id="share-modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="share-title">
+    <h3 id="share-title">Ergebnis teilen</h3>
+    <p class="modal-sub" id="share-sub"></p>
+    <div class="share-list" id="share-list"></div>
+    <div class="modal-actions">
+      <button class="logout-btn" id="share-close">Schlie&#223;en</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
