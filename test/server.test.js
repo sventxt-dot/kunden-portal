@@ -79,6 +79,10 @@ const flowiseMock = http.createServer(async (req, res) => {
       + JSON.stringify([{ question: '14er Schale – welche Variante?', options: ['khaki (Row 22)', 'mint (Row 23)', 'schwarz (Row 24)'] }, { question: 'Servietten – welche Farbe?', options: ['grau (Row 78)', 'schwarz (Row 79)'] }, { question: 'kaputt', options: ['nur eine'] }])
       + '\n```';
   }
+  if (/guardtest/.test(body.question)) {
+    text = '## 🔍 Validierung\n\n### ❓ 1 offene Punkte\n\n1. [A] **Bier – Aufteilung?** Row 69 / 71\n\n### ⚠️ 0 Annahmen\n\n🔁 V1/V2/V3-Check: 0\n\n### ✅ 3 Artikel klar zugeordnet\n\n'
+      + '1. Biertulpe → GBP Row 53 | 220 | 1,0 × 220\n2. Radeberger Flasche → Getränke Row 69 | nach Klärung ❓1 | Bier\n3. Kellnermesser → Bar-I Row 7 | 1 | Wein\n\n```quickreplies\n[{"question":"Bier – Aufteilung?","options":["70/30 → 129 + 55","andere Aufteilung (Freitext)"]}]\n```';
+  }
   res.end(JSON.stringify({ text, chatMessageId: 'cm1', chatId: body.chatId, ...extra }));
 });
 
@@ -190,6 +194,35 @@ test('```quickreplies-Block wird extrahiert, aus dem Text entfernt und strukturi
   const last = r.json.result.output_data.messages.at(-1);
   assert.deepEqual(last.quick_replies, r.json.quickReplies);
   assert.doesNotMatch(last.content, /quickreplies/);
+});
+
+test('Sicherheitsnetz (operativ): ✅-Zeile mit offener Menge wird nach ❓ verschoben, Folgerunde trägt Hinweis an Flowise', async () => {
+  seen.flowise.length = 0;
+  const r = await api('/api/flow/operativ', { method: 'POST', body: { question: 'guardtest bitte' }, token: tokenFor(ALICE) });
+  assert.equal(r.status, 200, r.text);
+  assert.match(r.json.answer, /### ✅ 2 Artikel klar zugeordnet/);
+  assert.match(r.json.answer, /### ❓ 2 offene Punkte/);
+  assert.match(r.json.answer, /2\. \[D\] \*\*Radeberger Flasche – Menge\/Row offen\?\*\*/);
+  assert.match(r.json.answer, /🛡️ \*\*Sicherheitsnetz \(Portal\):\*\* 1 Zeile aus ✅ nach ❓ verschoben.*Radeberger Flasche/);
+  const okBlock = r.json.answer.split('### ✅')[1];
+  assert.doesNotMatch(okBlock, /Radeberger/);
+  assert.match(okBlock, /1\. Biertulpe[\s\S]*2\. Kellnermesser/);
+  assert.deepEqual(r.json.safetyNet.moved, [{ article: 'Radeberger Flasche', reasons: ['offene Formulierung'] }]);
+  assert.deepEqual(r.json.quickReplies, [{ question: 'Bier – Aufteilung?', options: ['70/30 → 129 + 55', 'andere Aufteilung (Freitext)'] }]);
+  const last = r.json.result.output_data.messages.at(-1);
+  assert.equal(last.safety_net.moved[0].article, 'Radeberger Flasche');
+  assert.doesNotMatch(last.content.split('### ✅')[1], /nach Klärung ❓1/);
+  // Folgerunde: Hinweis wird der Frage an Flowise vorangestellt, nicht der gespeicherten Nutzernachricht
+  const r2 = await api('/api/flow/operativ', { method: 'POST', body: { question: 'Bier – Aufteilung? → 70/30 → 129 + 55', resultId: r.json.resultId }, token: tokenFor(ALICE) });
+  assert.equal(r2.status, 200, r2.text);
+  const sentQuestion = seen.flowise.at(-1).body.question;
+  assert.match(sentQuestion, /^\[Hinweis Portal-Sicherheitsnetz: In der letzten Validierung wurden 1 Artikel aus ✅ nach ❓ verschoben.*Radeberger Flasche.*\]\n\nBier – Aufteilung\? → 70\/30 → 129 \+ 55$/s);
+  const userMsg = r2.json.result.output_data.messages.at(-2);
+  assert.equal(userMsg.content, 'Bier – Aufteilung? → 70/30 → 129 + 55');
+  // Küche-Flow bleibt unberührt (kein Netz, kein Hinweis)
+  const k = await api('/api/flow/kueche', { method: 'POST', body: { question: 'guardtest kueche' }, token: tokenFor(ALICE) });
+  assert.equal(k.json.safetyNet, null);
+  assert.match(k.json.answer, /nach Klärung ❓1/);
 });
 
 test('Flowise followUpPrompts werden als quick_replies gespeichert und zurückgegeben', async () => {

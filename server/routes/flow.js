@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto';
 import { config } from '../lib/config.js';
 import { supabaseForUser } from '../lib/supabase.js';
 import { predict, FlowiseError } from '../lib/flowise.js';
+import { enforceValidation, followUpNote } from '../lib/validationGuard.js';
 
 const router = Router();
 
@@ -58,11 +59,26 @@ router.post('/:type', async (req, res, next) => {
       ? [{ data: upload.text, mime: 'application/pdf', name: upload.name, type: 'file:full' }]
       : undefined;
 
-    const { answer, quickReplies } = await predict(flow, {
-      question: question || 'Bitte analysiere das angehängte PDF.',
+    // Sicherheitsnetz-Hinweis aus der letzten Runde an den Agenten weiterreichen (nur Operativ)
+    const prevBot = [...(existing?.output_data?.messages || [])].reverse().find((m) => m.role === 'bot');
+    const carry = flow.type === 'operativ' ? followUpNote(prevBot?.safety_net?.moved) : '';
+
+    const flowiseResult = await predict(flow, {
+      question: carry + (question || 'Bitte analysiere das angehängte PDF.'),
       chatId,
       uploads,
     });
+    let { answer } = flowiseResult;
+    const { quickReplies } = flowiseResult;
+    let safetyNet = null;
+    if (flow.type === 'operativ') {
+      const guarded = enforceValidation(answer);
+      if (guarded.moved.length) {
+        answer = guarded.text;
+        safetyNet = { moved: guarded.moved.map(({ article, reasons }) => ({ article, reasons })), at: new Date().toISOString() };
+        console.warn('[guard] operativ: %d Zeile(n) aus ✅ nach ❓ verschoben: %s', guarded.moved.length, guarded.moved.map((m) => m.article).join(', '));
+      }
+    }
 
     const now = new Date().toISOString();
     const userMessage = {
@@ -76,6 +92,7 @@ router.post('/:type', async (req, res, next) => {
     const botMessage = {
       role: 'bot', content: answer, ts: new Date().toISOString(),
       ...(quickReplies.length ? { quick_replies: quickReplies } : {}),
+      ...(safetyNet ? { safety_net: safetyNet } : {}),
     };
 
     let row;
@@ -98,7 +115,7 @@ router.post('/:type', async (req, res, next) => {
       row = data;
     }
 
-    return res.json({ resultId: row.id, answer, quickReplies: botMessage.quick_replies || null, result: row });
+    return res.json({ resultId: row.id, answer, quickReplies: botMessage.quick_replies || null, safetyNet, result: row });
   } catch (err) {
     if (err instanceof FlowiseError) {
       console.error('[flow] Flowise-Fehler:', err.message, err.detail || '');
