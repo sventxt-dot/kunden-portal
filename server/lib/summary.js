@@ -15,7 +15,7 @@ export function splitOperatorSummary(text, safetyNet) {
   if (cut > -1) summary = summary.slice(0, cut).trim();
   if (!summary) return { summary: null, details: text };
   if (safetyNet?.moved?.length) {
-    summary += `\n\n🛡️ Zusätzlich offen (vom Portal aus ✅ herausgenommen, Menge/Row nicht eindeutig): ${safetyNet.moved.map((x) => x.article).join(', ')}.`;
+    summary += `\n\n🛡️ Zusätzlich offen (vom Portal aus „feststehend“ herausgenommen, weil Menge oder Zuordnung nicht eindeutig war): ${safetyNet.moved.map((x) => x.article).join(', ')}.`;
   }
   return { summary, details: text };
 }
