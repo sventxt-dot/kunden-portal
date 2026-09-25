@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
+import { marked } from 'marked';
 
 const ME = 'aaaaaaaa-0000-4000-8000-000000000001';
 const BOB = 'bbbbbbbb-0000-4000-8000-000000000002';
@@ -28,6 +29,12 @@ const INLINE = { ...RESULT, id: '44444444-0000-4000-8000-000000000004', title: '
     summary: '### Bestellung\n- Wasser: 135 Flaschen [[qr:0]]\n- Bier: 184 Flaschen [[qr:1]]\n- Servietten: 220 Stück\n\n### Stand\n✅ 2 feststehend',
     quick_replies: [{ question: 'Wasser – wie aufteilen?', options: ['70/30 → 95 + 40', 'andere Aufteilung'] }, { question: 'Bier – wie aufteilen?', options: ['80/20 → 147 + 37', 'andere Aufteilung'] }, { question: 'Servietten – Farbe?', options: ['weiß', 'grau'] }] },
 ] } };
+const MANY = { ...RESULT, id: '55555555-0000-4000-8000-000000000005', title: 'Zwölf Fragen', output_data: { chat_id: 'c5', messages: [
+  { role: 'user', content: 'x', ts: '2026-09-25T09:00:00Z' },
+  { role: 'bot', ts: '2026-09-25T09:01:00Z', content: '### ✅ 1 Artikel klar zugeordnet\n1. A → GBP Row 1 | 1 | ok\n\n## 📋 Operator-Ansicht\n\n### Bestellung\n- x\n',
+    summary: '### Bestellung laut Function Sheet\n' + Array.from({ length: 12 }, (_, i) => `- **Position ${i}:** Beschreibung ${i}\n[[qr:${i}]]`).join('\n') + '\n\n### Stand\n✅ 1 · ❓ 12',
+    quick_replies: Array.from({ length: 12 }, (_, i) => ({ question: `Frage ${i}?`, options: ['a', 'b'] })) },
+] } };
 const WITH_SUMMARY = { ...RESULT, id: '33333333-0000-4000-8000-000000000003', title: 'Mit Kurzfassung', output_data: { chat_id: 'c3', messages: [
   { role: 'user', content: 'Packliste bitte', ts: '2026-09-25T09:00:00Z' },
   { role: 'bot', ts: '2026-09-25T09:01:00Z', content: '## BLOCK 1\n| Getränk | Formel |\n|---|---|\n| Bier | 0,25 × 220 |\n\n### ✅ 3 Artikel klar zugeordnet\n1. Biertulpe → GBP Row 53 | 220 | ok\n\n## 📋 Kurzfassung\n\nValidierung fertig – 1 Frage unten per Klick.',
@@ -40,7 +47,7 @@ function makeSupabaseMock() {
     const q = { _f: {}, select() { return q; }, order() { return q; }, eq(k, v) { q._f[k] = v; return q; },
       insert(row) { q._ins = row; return q; }, single() { return q; },
       then(res) {
-        if (name === 'results') return res({ data: [RESULT, SHARED, WITH_SUMMARY, INLINE], error: null });
+        if (name === 'results') return res({ data: [RESULT, SHARED, WITH_SUMMARY, INLINE, MANY], error: null });
         if (name === 'result_shares') {
           if (q._ins) { win.__shares.push({ ...q._ins, created_at: new Date().toISOString() }); return res({ data: win.__shares.at(-1), error: null }); }
           return res({ data: [...win.__shares], error: null });
@@ -65,7 +72,7 @@ before(async () => {
     { type: 'kueche', name: 'Küchen-Assistent', description: 'Einkauf', icon: '🍽️', color: '#f5eaec' },
     { type: 'operativ', name: 'Operativer Assistent', description: 'Packliste', icon: '📋', color: '#eaf0f5' } ] };
   win.supabase = makeSupabaseMock();
-  win.marked = { parse: (t) => '<p>' + t.replace(/</g, '&lt;') + '</p>' };
+  win.marked = { parse: (t) => marked.parse(t) };
   sent = [];
   win.fetch = async (url, opts) => { sent.push({ url, body: JSON.parse(opts.body), headers: opts.headers }); return { status: 200, ok: true, json: async () => ({ resultId: RESULT.id, answer: 'Danke, übernommen.', quickReplies: null, result: RESULT }) }; };
   win.confirm = () => true;
@@ -76,9 +83,19 @@ before(async () => {
 
 test('Verlauf zeigt eigenes und geteiltes Ergebnis mit Badges', () => {
   const items = [...doc.querySelectorAll('.archive-item')];
-  assert.equal(items.length, 4);
+  assert.equal(items.length, 5);
   assert.ok(items.some((i) => i.textContent.includes('von Bob')), 'Badge "von Bob" fehlt');
-  assert.equal(doc.querySelectorAll('.archive-item .archive-del-btn').length, 3, 'Löschen nur bei eigenen Ergebnissen');
+  assert.equal(doc.querySelectorAll('.archive-item .archive-del-btn').length, 4, 'Löschen nur bei eigenen Ergebnissen');
+});
+
+test('zwölf Inline-Platzhalter mit echtem Markdown → zwölf Gruppen an den Positionen, keine am Ende', () => {
+  [...doc.querySelectorAll('.archive-item')].find((i) => i.textContent.includes('Zwölf Fragen')).click();
+  const sum = [...doc.querySelectorAll('.msg.bot .msg-bubble')].at(-1).querySelector('.msg-summary');
+  assert.equal(sum.querySelectorAll('.quick-group').length, 12);
+  assert.equal(doc.querySelectorAll('.quick-replies .quick-group').length, 0);
+  assert.doesNotMatch(sum.textContent, /\[\[qr:/);
+  const h = sum.innerHTML;
+  for (let i = 0; i < 11; i++) assert.ok(h.indexOf(`Position ${i}:`) < h.indexOf(`Frage ${i}?`) && h.indexOf(`Frage ${i}?`) < h.indexOf(`Position ${i + 1}:`), `Frage ${i} direkt nach Position ${i}`);
 });
 
 test('Inline-Ansicht: Platzhalter werden an Ort und Stelle zu Buttons, Rest am Ende, ein Sammel-Senden', async () => {

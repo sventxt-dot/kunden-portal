@@ -324,7 +324,7 @@
       const options = (Array.isArray(q.options) ? q.options : []).map((o) => (typeof o === 'string' ? o : o?.label || '')).map((o) => String(o).trim()).filter(Boolean);
       if (options.length >= 2) out.push({ question: String(q.question || '').trim(), options: [...new Set(options)].slice(0, 8) });
     });
-    return out.slice(0, 8);
+    return out.slice(0, 20); // wie MAX_QUESTIONS im Server
   }
 
   function parseQuickReplies(text) {
@@ -492,8 +492,8 @@
       if (groups?.length) {
         const walker = document.createTreeWalker(bubble.querySelector('.msg-summary'), NodeFilter.SHOW_TEXT);
         const nodes = [];
-        while (walker.nextNode()) if (TOKEN_RE.test(walker.currentNode.nodeValue)) nodes.push(walker.currentNode);
-        TOKEN_RE.lastIndex = 0;
+        const hasToken = /\[\[qr:\d+\]\]/; // bewusst ohne g-Flag: test() mit g-Flag überspringt Treffer
+        while (walker.nextNode()) if (hasToken.test(walker.currentNode.nodeValue)) nodes.push(walker.currentNode);
         nodes.forEach((node) => {
           const frag = document.createDocumentFragment();
           const parts = node.nodeValue.split(/(\[\[qr:\d+\]\])/);

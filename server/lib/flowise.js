@@ -63,7 +63,7 @@ export async function predict(flow, { question, chatId, uploads }) {
 // Platzhalter [[qr:N]] – das Frontend setzt dort die Buttons ein. Ein Block ganz am Ende
 // (Altformat) bekommt keinen Platzhalter; seine Gruppen werden am Ende der Nachricht gezeigt.
 const QR_BLOCK_ALL = /```quickrepl(?:y|ies)\s*\n([\s\S]*?)```/gi;
-const MAX_QUESTIONS = 12;
+const MAX_QUESTIONS = 20;
 const MAX_OPTIONS = 8;
 const MAX_LEN = 140;
 

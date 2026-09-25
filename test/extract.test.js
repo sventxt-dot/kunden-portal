@@ -31,8 +31,8 @@ test('Ansicht wird abgetrennt, Details ohne Platzhalter, Konsistenz-Check findet
   assert.deepEqual(questionsWithoutOpenPoint(text, [...questions, { question: 'Servietten – Farbe?', options: ['a', 'b'] }, { question: 'Block 2 – alle Vorschläge?', options: ['a', 'b'] }]), ['Servietten – Farbe?']);
 });
 
-test('Obergrenze 12 Gruppen', () => {
-  const many = Array.from({ length: 15 }, (_, i) => `Item ${i}\n\`\`\`quickreply\n{"question":"F${i}?","options":["a","b"]}\n\`\`\``).join('\n');
+test('Obergrenze 20 Gruppen', () => {
+  const many = Array.from({ length: 25 }, (_, i) => `Item ${i}\n\`\`\`quickreply\n{"question":"F${i}?","options":["a","b"]}\n\`\`\``).join('\n');
   const { questions, text } = extractQuickReplies(many);
-  assert.equal(questions.length, 12); assert.equal((text.match(/\[\[qr:/g) || []).length, 12);
+  assert.equal(questions.length, 20); assert.equal((text.match(/\[\[qr:/g) || []).length, 20);
 });
