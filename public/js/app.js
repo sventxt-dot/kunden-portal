@@ -258,15 +258,51 @@
       return;
     }
     const msgs = r.output_data?.messages || [];
-    msgs.forEach((m, i) => appendMessage(m.role, m.content, m.ts, m.attachment, i === msgs.length - 1 ? (m.quick_replies || parseQuickReplies(m.content)) : null));
+    msgs.forEach((m, i) => {
+      if (m.role === 'bot') {
+        const { text, groups } = quickRepliesFor(m);
+        appendMessage('bot', text, m.ts, null, i === msgs.length - 1 ? groups : null);
+      } else {
+        appendMessage(m.role, m.content, m.ts, m.attachment, null);
+      }
+    });
     scrollToBottom();
   }
 
   // ---------- Quick Replies ----------
-  // Rückfragen / Optionen des Assistenten als klickbare Buttons ("click to continue").
-  // Quelle 1: Flowise Follow-up-Prompts (message.quick_replies, vom Server durchgereicht).
-  // Quelle 2: Fallback-Parser über den Antworttext: der letzte Listenblock (•, -, 1.) mit
-  //           2–6 kurzen Einträgen, oder bis zu 4 kurze Fragezeilen am Ende der Antwort.
+  // Rückfragen des Assistenten als klickbare Buttons ("click to continue").
+  // Quelle 1: message.quick_replies = [{question, options[]}] (Server: ```quickreplies-Block
+  //           des Operativ-Prompts oder Flowise-Follow-ups).
+  // Quelle 2: ```quickreplies-Block noch im Text (ältere Nachrichten) → hier extrahiert.
+  // Quelle 3: Fallback-Parser über den Antworttext: abschließende Fragezeilen oder eine
+  //           Auswahl-Liste (2–6 kurze Einträge) hinter einer Auswahl-Frage.
+  const QR_BLOCK = /```quickreplies\s*\n([\s\S]*?)```/i;
+
+  function extractQuickBlock(text) {
+    const m = String(text || '').match(QR_BLOCK);
+    if (!m) return { text: text || '', groups: [] };
+    let parsed = null;
+    try { parsed = JSON.parse(m[1].trim()); } catch { /* kein valides JSON → Block trotzdem ausblenden */ }
+    const groups = normalizeGroups(parsed);
+    return { text: String(text).replace(QR_BLOCK, '').replace(/\n{3,}/g, '\n\n').trim(), groups };
+  }
+
+  function normalizeGroups(input) {
+    if (!input) return [];
+    if (Array.isArray(input) && input.every((x) => typeof x === 'string')) {
+      const opts = input.map((x) => x.trim()).filter(Boolean);
+      return opts.length >= 1 ? [{ question: '', options: opts }] : [];
+    }
+    const list = Array.isArray(input) ? input : [];
+    const out = [];
+    list.forEach((q) => {
+      if (!q || typeof q !== 'object') return;
+      const options = (Array.isArray(q.options) ? q.options : []).map((o) => (typeof o === 'string' ? o : o?.label || '')).map((o) => String(o).trim()).filter(Boolean);
+      if (options.length >= 2) out.push({ question: String(q.question || '').trim(), options: [...new Set(options)].slice(0, 8) });
+    });
+    return out.slice(0, 8);
+  }
+
   function parseQuickReplies(text) {
     if (!text) return [];
     const lines = String(text).split('\n').map((l) => l.trim());
@@ -299,21 +335,78 @@
     return [];
   }
 
-  function renderQuickReplies(bubbleWrap, replies) {
+  // Liefert {text, groups} für eine Bot-Nachricht: strukturierte Gruppen bevorzugt, sonst Heuristik.
+  function quickRepliesFor(message) {
+    const { text, groups: fromBlock } = extractQuickBlock(message.content);
+    const stored = normalizeGroups(message.quick_replies);
+    const groups = stored.length ? stored : fromBlock.length ? fromBlock : normalizeGroups(parseQuickReplies(text));
+    return { text, groups };
+  }
+
+  function renderQuickReplies(bubbleWrap, groups) {
     document.querySelectorAll('.quick-replies').forEach((q) => q.remove());
     const r = state.activeResult;
     const readonly = !!r && !isOwner(r);
-    if (!replies?.length || readonly || !state.activeFlow) return;
+    if (!groups?.length || readonly || !state.activeFlow) return;
     const box = document.createElement('div');
     box.className = 'quick-replies';
-    replies.forEach((txt) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'quick-reply';
-      b.textContent = txt;
-      b.addEventListener('click', () => { if (!state.isLoading) sendMessage(txt); });
-      box.appendChild(b);
+    const multi = groups.length > 1 || groups.some((g) => g.question);
+    const chosen = new Map(); // groupIndex -> option
+
+    const sendBtn = document.createElement('button');
+    sendBtn.type = 'button';
+    sendBtn.className = 'quick-send';
+    sendBtn.disabled = true;
+
+    const updateSend = () => {
+      sendBtn.textContent = `Antworten senden (${chosen.size}/${groups.length})`;
+      sendBtn.disabled = chosen.size === 0;
+    };
+
+    groups.forEach((g, gi) => {
+      const grp = document.createElement('div');
+      grp.className = 'quick-group';
+      if (g.question) {
+        const label = document.createElement('div');
+        label.className = 'quick-question';
+        label.textContent = g.question;
+        grp.appendChild(label);
+      }
+      const row = document.createElement('div');
+      row.className = 'quick-options';
+      g.options.forEach((txt) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'quick-reply';
+        b.textContent = txt;
+        b.addEventListener('click', () => {
+          if (state.isLoading) return;
+          if (!multi) { sendMessage(txt); return; }                      // eine Frage → sofort senden
+          if (groups.length === 1) { sendMessage(`${g.question} → ${txt}`); return; }
+          chosen.set(gi, txt);                                            // mehrere Fragen → sammeln
+          row.querySelectorAll('.quick-reply').forEach((x) => x.classList.toggle('selected', x === b));
+          updateSend();
+        });
+        row.appendChild(b);
+      });
+      grp.appendChild(row);
+      box.appendChild(grp);
     });
+
+    if (groups.length > 1) {
+      updateSend();
+      sendBtn.addEventListener('click', () => {
+        if (state.isLoading || !chosen.size) return;
+        const lines = groups.map((g, gi) => (chosen.has(gi) ? `- ${g.question || 'Auswahl'} → ${chosen.get(gi)}` : null)).filter(Boolean);
+        const open = groups.length - chosen.size;
+        sendMessage(`Meine Antworten:\n${lines.join('\n')}${open ? `\n(${open} Frage${open > 1 ? 'n' : ''} noch offen)` : ''}`);
+      });
+      const hint = document.createElement('div');
+      hint.className = 'quick-hint';
+      hint.textContent = 'Pro Frage eine Option wählen, dann senden. Freitext geht weiterhin unten im Eingabefeld.';
+      box.appendChild(hint);
+      box.appendChild(sendBtn);
+    }
     bubbleWrap.querySelector('.msg-bubble').parentNode.appendChild(box);
     scrollToBottom();
   }
@@ -364,7 +457,7 @@
       if (i >= chars.length) {
         bubble.innerHTML = renderMd(fullText);
         bubble.querySelectorAll('a').forEach((a) => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
-        renderQuickReplies(wrap, quickReplies || parseQuickReplies(fullText));
+        renderQuickReplies(wrap, quickReplies);
         scrollToBottom();
         return;
       }
@@ -464,7 +557,8 @@
       $('share-btn').hidden = false;
       renderAgents();
       renderArchive();
-      typewriterMessage(data.answer, new Date().toISOString(), data.quickReplies);
+      const shown = quickRepliesFor({ content: data.answer, quick_replies: data.quickReplies });
+      typewriterMessage(shown.text, new Date().toISOString(), shown.groups);
     } catch (err) {
       removeTyping();
       appendMessage('bot', 'Der Assistent konnte nicht antworten.\n\nDetails: ' + err.message, new Date().toISOString());

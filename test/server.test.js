@@ -73,7 +73,13 @@ const flowiseMock = http.createServer(async (req, res) => {
   if (flowiseMode === 'fail') { res.writeHead(500); return res.end('boom'); }
   res.writeHead(200, { 'content-type': 'application/json' });
   const extra = /followups/.test(body.question) ? { followUpPrompts: JSON.stringify(['Option A?', 'Option B?']) } : {};
-  res.end(JSON.stringify({ text: 'Antwort auf: ' + body.question, chatMessageId: 'cm1', chatId: body.chatId, ...extra }));
+  let text = 'Antwort auf: ' + body.question;
+  if (/quickblock/.test(body.question)) {
+    text += '\n\n## ❓ 2 offene Punkte\n1. 14er Schale – welche Variante?\n2. Servietten – welche Farbe?\n\n```quickreplies\n'
+      + JSON.stringify([{ question: '14er Schale – welche Variante?', options: ['khaki (Row 22)', 'mint (Row 23)', 'schwarz (Row 24)'] }, { question: 'Servietten – welche Farbe?', options: ['grau (Row 78)', 'schwarz (Row 79)'] }, { question: 'kaputt', options: ['nur eine'] }])
+      + '\n```';
+  }
+  res.end(JSON.stringify({ text, chatMessageId: 'cm1', chatId: body.chatId, ...extra }));
 });
 
 let base;
@@ -172,11 +178,25 @@ test('PDF-Upload wird als file:full an Flowise gereicht', async () => {
   assert.deepEqual(r.json.result.output_data.messages[0].attachment, { name: 'event.pdf', size: 1234, pages: 2 });
 });
 
+test('```quickreplies-Block wird extrahiert, aus dem Text entfernt und strukturiert gespeichert', async () => {
+  const r = await api('/api/flow/operativ', { method: 'POST', body: { question: 'quickblock bitte' }, token: tokenFor(ALICE) });
+  assert.equal(r.status, 200, r.text);
+  assert.doesNotMatch(r.json.answer, /quickreplies|```/);
+  assert.match(r.json.answer, /❓ 2 offene Punkte/);
+  assert.deepEqual(r.json.quickReplies, [
+    { question: '14er Schale – welche Variante?', options: ['khaki (Row 22)', 'mint (Row 23)', 'schwarz (Row 24)'] },
+    { question: 'Servietten – welche Farbe?', options: ['grau (Row 78)', 'schwarz (Row 79)'] },
+  ]);
+  const last = r.json.result.output_data.messages.at(-1);
+  assert.deepEqual(last.quick_replies, r.json.quickReplies);
+  assert.doesNotMatch(last.content, /quickreplies/);
+});
+
 test('Flowise followUpPrompts werden als quick_replies gespeichert und zurückgegeben', async () => {
   const r = await api('/api/flow/kueche', { method: 'POST', body: { question: 'bitte followups' }, token: tokenFor(ALICE) });
   assert.equal(r.status, 200, r.text);
-  assert.deepEqual(r.json.quickReplies, ['Option A?', 'Option B?']);
-  assert.deepEqual(r.json.result.output_data.messages.at(-1).quick_replies, ['Option A?', 'Option B?']);
+  assert.deepEqual(r.json.quickReplies, [{ question: '', options: ['Option A?', 'Option B?'] }]);
+  assert.deepEqual(r.json.result.output_data.messages.at(-1).quick_replies, [{ question: '', options: ['Option A?', 'Option B?'] }]);
   const plain = await api('/api/flow/kueche', { method: 'POST', body: { question: 'ohne' }, token: tokenFor(ALICE) });
   assert.equal(plain.json.quickReplies, null);
   assert.equal(plain.json.result.output_data.messages.at(-1).quick_replies, undefined);

@@ -44,8 +44,47 @@ export async function predict(flow, { question, chatId, uploads }) {
   }
 
   const data = await res.json();
-  const answer = data.text ?? data.answer ?? data.output ?? JSON.stringify(data);
-  return { answer: String(answer), chatMessageId: data.chatMessageId ?? null, followUpPrompts: parseFollowUps(data.followUpPrompts) };
+  const raw = String(data.text ?? data.answer ?? data.output ?? JSON.stringify(data));
+  const { text: answer, questions } = extractQuickReplies(raw);
+  const followUps = parseFollowUps(data.followUpPrompts);
+  // Priorität: strukturierter ```quickreplies-Block aus dem Prompt, sonst Flowise-Follow-ups
+  const quickReplies = questions.length ? questions : (followUps.length ? [{ question: '', options: followUps }] : []);
+  return { answer, chatMessageId: data.chatMessageId ?? null, quickReplies };
+}
+
+// Der Operativ-Prompt (Abschnitt 14) beendet Antworten mit offenen Fragen durch einen Block
+//   ```quickreplies
+//   [{"question":"14er Schale – welche Variante?","options":["khaki (Row 22)","mint (Row 23)"]}]
+//   ```
+// Der Block wird aus dem sichtbaren Text entfernt und als Fragen mit Optionen zurückgegeben.
+const QR_BLOCK = /```quickreplies\s*\n([\s\S]*?)```/i;
+const MAX_QUESTIONS = 8;
+const MAX_OPTIONS = 8;
+const MAX_LEN = 140;
+
+export function extractQuickReplies(text) {
+  const m = text.match(QR_BLOCK);
+  if (!m) return { text, questions: [] };
+  let parsed;
+  try { parsed = JSON.parse(m[1].trim()); } catch { return { text, questions: [] }; }
+  const questions = normalizeQuestions(parsed);
+  const cleaned = text.replace(QR_BLOCK, '').replace(/\n{3,}/g, '\n\n').trim();
+  return { text: cleaned, questions };
+}
+
+export function normalizeQuestions(input) {
+  const list = Array.isArray(input) ? input : (input && Array.isArray(input.questions) ? input.questions : []);
+  const out = [];
+  for (const q of list) {
+    if (!q || typeof q !== 'object') continue;
+    const question = String(q.question ?? q.frage ?? '').trim().slice(0, MAX_LEN);
+    const options = (Array.isArray(q.options) ? q.options : Array.isArray(q.optionen) ? q.optionen : [])
+      .map((o) => (typeof o === 'string' ? o : o?.label ?? o?.text ?? '')).map((o) => String(o).trim().slice(0, MAX_LEN)).filter(Boolean);
+    const unique = [...new Set(options)].slice(0, MAX_OPTIONS);
+    if (unique.length >= 2) out.push({ question, options: unique });
+    if (out.length >= MAX_QUESTIONS) break;
+  }
+  return out;
 }
 
 // Flowise-Feature "Follow-up Prompts": kommt als JSON-String oder Array zurück.
