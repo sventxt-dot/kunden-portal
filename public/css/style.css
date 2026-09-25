@@ -350,3 +350,12 @@
 }
 .msg-details { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); font-size: .85rem; opacity: .9; }
 .msg-details[hidden] { display: none; }
+
+/* Inline-Fragen in der Operator-Ansicht + Sammel-Senden */
+.msg-summary .quick-group { margin: 6px 0 10px; padding: 8px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+.msg-summary p:has(> .quick-group) { margin: 0; }
+.quick-footer { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.quick-footer .quick-send { align-self: flex-start; }
+.quick-reply:disabled { opacity: .45; cursor: default; }
+.pref-row { display: flex; align-items: center; gap: 6px; padding: 6px 16px 12px; font-size: .75rem; color: var(--muted); cursor: pointer; }
+.pref-row input { accent-color: var(--primary); }

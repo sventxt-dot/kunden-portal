@@ -12,7 +12,7 @@ import { config } from '../lib/config.js';
 import { supabaseForUser } from '../lib/supabase.js';
 import { predict, FlowiseError } from '../lib/flowise.js';
 import { enforceValidation, followUpNote } from '../lib/validationGuard.js';
-import { splitOperatorSummary } from '../lib/summary.js';
+import { splitOperatorSummary, questionsWithoutOpenPoint } from '../lib/summary.js';
 
 const router = Router();
 
@@ -83,6 +83,11 @@ router.post('/:type', async (req, res, next) => {
       // Kurzfassung für den Operator (Prompt Abschnitt 21) – Details bleiben im gespeicherten Volltext
       const split = splitOperatorSummary(answer, safetyNet);
       summary = split.summary;
+      answer = split.details;
+      if (summary && quickReplies.length) {
+        const orphan = questionsWithoutOpenPoint(answer, quickReplies);
+        if (orphan.length) console.warn('[view] Inline-Fragen ohne ❓-Punkt: %s', orphan.join(' | '));
+      }
     }
 
     const now = new Date().toISOString();
@@ -126,7 +131,7 @@ router.post('/:type', async (req, res, next) => {
     if (!req.get('X-Portal-Client')) {
       const hint = '⚠️ **Bitte die Portal-Seite einmal neu laden (F5 bzw. ⌘R).** Ihre Ansicht ist veraltet; die Antwort-Buttons und die Kurzfassung erscheinen erst nach dem Neuladen.\n\n';
       const legacyRow = { ...row, output_data: { ...row.output_data, messages: (row.output_data?.messages || []).map(({ quick_replies, summary: _s, ...m }) => m) } };
-      return res.json({ resultId: row.id, answer: hint + answer, summary: null, quickReplies: null, safetyNet, legacyClient: true, result: legacyRow });
+      return res.json({ resultId: row.id, answer: hint + answer.replace(/\[\[qr:\d+\]\]/g, ''), summary: null, quickReplies: null, safetyNet, legacyClient: true, result: legacyRow });
     }
     return res.json({ resultId: row.id, answer, summary, quickReplies: botMessage.quick_replies || null, safetyNet, result: row });
   } catch (err) {

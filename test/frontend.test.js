@@ -22,6 +22,12 @@ const RESULT = {
   ] },
 };
 const SHARED = { ...RESULT, id: '22222222-0000-4000-8000-000000000002', owner_id: BOB, title: 'Von Bob geteilt' };
+const INLINE = { ...RESULT, id: '44444444-0000-4000-8000-000000000004', title: 'Inline-Ansicht', output_data: { chat_id: 'c4', messages: [
+  { role: 'user', content: 'Packliste bitte', ts: '2026-09-25T09:00:00Z' },
+  { role: 'bot', ts: '2026-09-25T09:01:00Z', content: '## BLOCK 1\n| a | b |\n\n### ✅ 2 Artikel klar zugeordnet\n1. Biertulpe → GBP Row 53 | 220 | ok\n\n## 📋 Operator-Ansicht\n\n### Bestellung\n- Wasser: 135 Flaschen\n- Bier: 184 Flaschen\n',
+    summary: '### Bestellung\n- Wasser: 135 Flaschen [[qr:0]]\n- Bier: 184 Flaschen [[qr:1]]\n- Servietten: 220 Stück\n\n### Stand\n✅ 2 feststehend',
+    quick_replies: [{ question: 'Wasser – wie aufteilen?', options: ['70/30 → 95 + 40', 'andere Aufteilung'] }, { question: 'Bier – wie aufteilen?', options: ['80/20 → 147 + 37', 'andere Aufteilung'] }, { question: 'Servietten – Farbe?', options: ['weiß', 'grau'] }] },
+] } };
 const WITH_SUMMARY = { ...RESULT, id: '33333333-0000-4000-8000-000000000003', title: 'Mit Kurzfassung', output_data: { chat_id: 'c3', messages: [
   { role: 'user', content: 'Packliste bitte', ts: '2026-09-25T09:00:00Z' },
   { role: 'bot', ts: '2026-09-25T09:01:00Z', content: '## BLOCK 1\n| Getränk | Formel |\n|---|---|\n| Bier | 0,25 × 220 |\n\n### ✅ 3 Artikel klar zugeordnet\n1. Biertulpe → GBP Row 53 | 220 | ok\n\n## 📋 Kurzfassung\n\nValidierung fertig – 1 Frage unten per Klick.',
@@ -34,7 +40,7 @@ function makeSupabaseMock() {
     const q = { _f: {}, select() { return q; }, order() { return q; }, eq(k, v) { q._f[k] = v; return q; },
       insert(row) { q._ins = row; return q; }, single() { return q; },
       then(res) {
-        if (name === 'results') return res({ data: [RESULT, SHARED, WITH_SUMMARY], error: null });
+        if (name === 'results') return res({ data: [RESULT, SHARED, WITH_SUMMARY, INLINE], error: null });
         if (name === 'result_shares') {
           if (q._ins) { win.__shares.push({ ...q._ins, created_at: new Date().toISOString() }); return res({ data: win.__shares.at(-1), error: null }); }
           return res({ data: [...win.__shares], error: null });
@@ -70,9 +76,46 @@ before(async () => {
 
 test('Verlauf zeigt eigenes und geteiltes Ergebnis mit Badges', () => {
   const items = [...doc.querySelectorAll('.archive-item')];
-  assert.equal(items.length, 3);
+  assert.equal(items.length, 4);
   assert.ok(items.some((i) => i.textContent.includes('von Bob')), 'Badge "von Bob" fehlt');
-  assert.equal(doc.querySelectorAll('.archive-item .archive-del-btn').length, 2, 'Löschen nur bei eigenen Ergebnissen');
+  assert.equal(doc.querySelectorAll('.archive-item .archive-del-btn').length, 3, 'Löschen nur bei eigenen Ergebnissen');
+});
+
+test('Inline-Ansicht: Platzhalter werden an Ort und Stelle zu Buttons, Rest am Ende, ein Sammel-Senden', async () => {
+  [...doc.querySelectorAll('.archive-item')].find((i) => i.textContent.includes('Inline-Ansicht')).click();
+  const bubble = [...doc.querySelectorAll('.msg.bot .msg-bubble')].at(-1);
+  const summary = bubble.querySelector('.msg-summary');
+  assert.doesNotMatch(summary.textContent, /\[\[qr:/, 'keine Platzhalter sichtbar');
+  const groups = summary.querySelectorAll('.quick-group');
+  assert.equal(groups.length, 2);
+  assert.equal(groups[0].querySelector('.quick-question').textContent, 'Wasser – wie aufteilen?');
+  const html = summary.innerHTML;
+  assert.ok(html.indexOf('Wasser: 135 Flaschen') < html.indexOf('Wasser – wie aufteilen?') && html.indexOf('Wasser – wie aufteilen?') < html.indexOf('Bier: 184 Flaschen'), 'Wasser-Buttons direkt nach Wasser, vor Bier');
+  const rest = doc.querySelectorAll('.quick-replies .quick-group');
+  assert.equal(rest.length, 1); assert.equal(rest[0].querySelector('.quick-question').textContent, 'Servietten – Farbe?');
+  assert.equal(doc.querySelectorAll('.quick-send').length, 1);
+  assert.ok(bubble.querySelector('.msg-details').hidden);
+  assert.doesNotMatch(bubble.querySelector('.msg-details').textContent, /Operator-Ansicht|Bestellung/, 'Details enden vor der Ansicht');
+  // Auswahl inline + am Ende, gemeinsam senden
+  groups[0].querySelectorAll('.quick-reply')[0].click();
+  rest[0].querySelectorAll('.quick-reply')[1].click();
+  const send = doc.querySelector('.quick-send'); assert.match(send.textContent, /2\/3/);
+  const before = sent.length; send.click(); await new Promise((r) => setTimeout(r, 30));
+  assert.equal(sent.length, before + 1);
+  assert.equal(sent.at(-1).body.question, 'Meine Antworten:\n- Wasser – wie aufteilen? → 70/30 → 95 + 40\n- Servietten – Farbe? → grau\n(1 Frage noch offen)');
+});
+
+test('„Details immer anzeigen" gilt lokal und sofort', () => {
+  const pref = doc.getElementById('pref-details');
+  assert.equal(pref.checked, false);
+  pref.checked = true; pref.dispatchEvent(new win.Event('change'));
+  assert.equal(win.localStorage.getItem('mc_always_details'), '1');
+  [...doc.querySelectorAll('.archive-item')].find((i) => i.textContent.includes('Mit Kurzfassung')).click();
+  const bubble = [...doc.querySelectorAll('.msg.bot .msg-bubble')].at(-1);
+  assert.equal(bubble.querySelector('.msg-details').hidden, false);
+  assert.equal(bubble.querySelector('.details-toggle').textContent, 'Details ausblenden ▴');
+  pref.checked = false; pref.dispatchEvent(new win.Event('change'));
+  assert.equal(bubble.querySelector('.msg-details').hidden, true);
 });
 
 test('Kurzfassung: nur Summary sichtbar, Tabellen hinter „Details einblenden", Buttons darunter', () => {
@@ -125,13 +168,15 @@ test('Klick markiert Option, Sammel-Senden schickt „Meine Antworten" mit resul
   const send = doc.querySelector('.quick-send');
   assert.equal(send.disabled, false);
   assert.match(send.textContent, /2\/2/);
+  const before = sent.length;
   send.click();
   await new Promise((r) => setTimeout(r, 30));
-  assert.equal(sent.length, 1);
-  assert.equal(sent[0].url, '/api/flow/operativ');
-  assert.equal(sent[0].body.resultId, RESULT.id);
-  assert.equal(sent[0].headers['X-Portal-Client'], 'test', 'Client sendet seine Version');
-  assert.equal(sent[0].body.question, 'Meine Antworten:\n- 14er Schale – welche Variante? → khaki (Row 22)\n- Servietten – welche Farbe? → schwarz (Row 79)');
+  assert.equal(sent.length, before + 1);
+  const last = sent.at(-1);
+  assert.equal(last.url, '/api/flow/operativ');
+  assert.equal(last.body.resultId, RESULT.id);
+  assert.equal(last.headers['X-Portal-Client'], 'test', 'Client sendet seine Version');
+  assert.equal(last.body.question, 'Meine Antworten:\n- 14er Schale – welche Variante? → khaki (Row 22)\n- Servietten – welche Farbe? → schwarz (Row 79)');
   assert.equal(doc.querySelectorAll('.quick-replies').length, 0, 'alte Buttons nach dem Senden entfernt');
 });
 

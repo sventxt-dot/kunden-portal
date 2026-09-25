@@ -20,6 +20,8 @@
   }
 
   const $ = (id) => document.getElementById(id);
+  const PREF_DETAILS = 'mc_always_details';
+  const alwaysDetails = () => { try { return localStorage.getItem(PREF_DETAILS) === '1'; } catch { return false; } };
   const state = {
     user: null,            // { id, email }
     users: new Map(),      // id -> { id, email, display_name }  (portal_users())
@@ -114,6 +116,15 @@
   });
 
   $('logout-btn').addEventListener('click', () => sb.auth.signOut());
+  const detailsPref = $('pref-details');
+  if (detailsPref) {
+    detailsPref.checked = alwaysDetails();
+    detailsPref.addEventListener('change', () => {
+      try { localStorage.setItem(PREF_DETAILS, detailsPref.checked ? '1' : '0'); } catch { /* privater Modus */ }
+      document.querySelectorAll('.msg-details').forEach((d) => { d.hidden = !detailsPref.checked; });
+      document.querySelectorAll('.details-toggle').forEach((b) => { b.textContent = detailsPref.checked ? 'Details ausblenden ▴' : 'Details einblenden ▾'; });
+    });
+  }
 
   async function enterApp(user) {
     state.user = { id: user.id, email: user.email };
@@ -274,6 +285,7 @@
       if (m.role === 'bot') {
         const { text, groups } = quickRepliesFor(m);
         appendMessage('bot', text, m.ts, null, i === msgs.length - 1 ? groups : null, m.summary || null);
+        if (i !== msgs.length - 1) document.querySelectorAll('.msg.bot:last-child .quick-reply').forEach((b) => { b.disabled = true; });
       } else {
         appendMessage(m.role, m.content, m.ts, m.attachment, null);
       }
@@ -355,71 +367,86 @@
     return { text, groups };
   }
 
-  function renderQuickReplies(bubbleWrap, groups) {
-    document.querySelectorAll('.quick-replies').forEach((q) => q.remove());
+  // Auswahlzustand pro Nachricht: groupIndex -> Option
+  let qrState = null;
+
+  function buildGroup(g, gi) {
+    const grp = document.createElement('div');
+    grp.className = 'quick-group';
+    grp.dataset.group = String(gi);
+    if (g.question) {
+      const label = document.createElement('div');
+      label.className = 'quick-question';
+      label.textContent = g.question;
+      grp.appendChild(label);
+    }
+    const row = document.createElement('div');
+    row.className = 'quick-options';
+    g.options.forEach((txt) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'quick-reply';
+      b.textContent = txt;
+      b.addEventListener('click', () => {
+        if (state.isLoading || !qrState) return;
+        if (qrState.groups.length === 1) { sendMessage(g.question ? `${g.question} → ${txt}` : txt); return; } // eine Frage → sofort
+        qrState.chosen.set(gi, txt);
+        row.querySelectorAll('.quick-reply').forEach((x) => x.classList.toggle('selected', x === b));
+        updateQrSend();
+      });
+      row.appendChild(b);
+    });
+    grp.appendChild(row);
+    return grp;
+  }
+
+  function updateQrSend() {
+    const btn = document.querySelector('.quick-send');
+    if (!btn || !qrState) return;
+    btn.textContent = `Antworten senden (${qrState.chosen.size}/${qrState.groups.length})`;
+    btn.disabled = qrState.chosen.size === 0;
+  }
+
+  // groups: alle Fragegruppen der Nachricht; usedInline: Indizes, die schon in der Ansicht sitzen
+  function renderQuickReplies(bubbleWrap, groups, usedInline = new Set()) {
+    document.querySelectorAll('.quick-replies, .quick-footer').forEach((q) => q.remove());
+    qrState = null;
     const r = state.activeResult;
     const readonly = !!r && !isOwner(r);
-    if (!groups?.length || readonly || !state.activeFlow) return;
-    const box = document.createElement('div');
-    box.className = 'quick-replies';
-    const multi = groups.length > 1 || groups.some((g) => g.question);
-    const chosen = new Map(); // groupIndex -> option
-
-    const sendBtn = document.createElement('button');
-    sendBtn.type = 'button';
-    sendBtn.className = 'quick-send';
-    sendBtn.disabled = true;
-
-    const updateSend = () => {
-      sendBtn.textContent = `Antworten senden (${chosen.size}/${groups.length})`;
-      sendBtn.disabled = chosen.size === 0;
-    };
-
-    groups.forEach((g, gi) => {
-      const grp = document.createElement('div');
-      grp.className = 'quick-group';
-      if (g.question) {
-        const label = document.createElement('div');
-        label.className = 'quick-question';
-        label.textContent = g.question;
-        grp.appendChild(label);
-      }
-      const row = document.createElement('div');
-      row.className = 'quick-options';
-      g.options.forEach((txt) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'quick-reply';
-        b.textContent = txt;
-        b.addEventListener('click', () => {
-          if (state.isLoading) return;
-          if (!multi) { sendMessage(txt); return; }                      // eine Frage → sofort senden
-          if (groups.length === 1) { sendMessage(`${g.question} → ${txt}`); return; }
-          chosen.set(gi, txt);                                            // mehrere Fragen → sammeln
-          row.querySelectorAll('.quick-reply').forEach((x) => x.classList.toggle('selected', x === b));
-          updateSend();
-        });
-        row.appendChild(b);
-      });
-      grp.appendChild(row);
-      box.appendChild(grp);
-    });
-
+    if (!groups?.length || readonly || !state.activeFlow) {
+      // Empfänger/kein Flow: Inline-Gruppen entschärfen
+      bubbleWrap.querySelectorAll('.quick-group .quick-reply').forEach((b) => { b.disabled = true; });
+      return;
+    }
+    qrState = { groups, chosen: new Map() };
+    const rest = groups.map((g, gi) => [g, gi]).filter(([, gi]) => !usedInline.has(gi));
+    if (rest.length) {
+      const box = document.createElement('div');
+      box.className = 'quick-replies';
+      rest.forEach(([g, gi]) => box.appendChild(buildGroup(g, gi)));
+      bubbleWrap.querySelector('.msg-bubble').parentNode.appendChild(box);
+    }
     if (groups.length > 1) {
-      updateSend();
+      const footer = document.createElement('div');
+      footer.className = 'quick-footer';
+      const sendBtn = document.createElement('button');
+      sendBtn.type = 'button';
+      sendBtn.className = 'quick-send';
+      sendBtn.disabled = true;
       sendBtn.addEventListener('click', () => {
-        if (state.isLoading || !chosen.size) return;
-        const lines = groups.map((g, gi) => (chosen.has(gi) ? `- ${g.question || 'Auswahl'} → ${chosen.get(gi)}` : null)).filter(Boolean);
-        const open = groups.length - chosen.size;
+        if (state.isLoading || !qrState || !qrState.chosen.size) return;
+        const lines = qrState.groups.map((g, gi) => (qrState.chosen.has(gi) ? `- ${g.question || 'Auswahl'} → ${qrState.chosen.get(gi)}` : null)).filter(Boolean);
+        const open = qrState.groups.length - qrState.chosen.size;
         sendMessage(`Meine Antworten:\n${lines.join('\n')}${open ? `\n(${open} Frage${open > 1 ? 'n' : ''} noch offen)` : ''}`);
       });
       const hint = document.createElement('div');
       hint.className = 'quick-hint';
       hint.textContent = 'Pro Frage eine Option wählen, dann senden. Freitext geht weiterhin unten im Eingabefeld.';
-      box.appendChild(hint);
-      box.appendChild(sendBtn);
+      footer.appendChild(hint);
+      footer.appendChild(sendBtn);
+      bubbleWrap.querySelector('.msg-bubble').parentNode.appendChild(footer);
+      updateQrSend();
     }
-    bubbleWrap.querySelector('.msg-bubble').parentNode.appendChild(box);
     scrollToBottom();
   }
 
@@ -443,25 +470,51 @@
     return { wrap, bubble };
   }
 
-  // Bot-Blase: Kurzfassung (falls vorhanden) sichtbar, Volltext hinter „Details einblenden“
-  function fillBotBubble(bubble, content, summary) {
+  // Bot-Blase: Operator-Ansicht (falls vorhanden) sichtbar, Volltext hinter „Details einblenden“.
+  // Platzhalter [[qr:N]] in der Ansicht werden durch die Button-Gruppe N ersetzt (Inline-Fragen).
+  const TOKEN_RE = /\[\[qr:(\d+)\]\]/g;
+  const VIEW_HEAD_RE = /^#{2,4}\s*📋\s*(?:Operator-Ansicht|Kurzfassung)[^\n]*$/m;
+
+  function fillBotBubble(bubble, content, summary, groups) {
+    const used = new Set();
     if (!summary) {
-      bubble.innerHTML = renderMd(content);
+      bubble.innerHTML = renderMd(content.replace(TOKEN_RE, ''));
     } else {
+      const detailsText = content.split(VIEW_HEAD_RE)[0].replace(TOKEN_RE, '').trim();
+      const showDetails = alwaysDetails();
       bubble.innerHTML = '<div class="msg-summary">' + renderMd(summary) + '</div>'
-        + '<button type="button" class="details-toggle">Details einblenden ▾</button>'
-        + '<div class="msg-details" hidden>' + renderMd(content) + '</div>';
+        + '<button type="button" class="details-toggle">' + (showDetails ? 'Details ausblenden ▴' : 'Details einblenden ▾') + '</button>'
+        + '<div class="msg-details"' + (showDetails ? '' : ' hidden') + '>' + renderMd(detailsText) + '</div>';
       const btn = bubble.querySelector('.details-toggle');
       const det = bubble.querySelector('.msg-details');
       btn.addEventListener('click', () => { det.hidden = !det.hidden; btn.textContent = det.hidden ? 'Details einblenden ▾' : 'Details ausblenden ▴'; });
+      // Inline-Platzhalter durch Button-Gruppen ersetzen
+      if (groups?.length) {
+        const walker = document.createTreeWalker(bubble.querySelector('.msg-summary'), NodeFilter.SHOW_TEXT);
+        const nodes = [];
+        while (walker.nextNode()) if (TOKEN_RE.test(walker.currentNode.nodeValue)) nodes.push(walker.currentNode);
+        TOKEN_RE.lastIndex = 0;
+        nodes.forEach((node) => {
+          const frag = document.createDocumentFragment();
+          const parts = node.nodeValue.split(/(\[\[qr:\d+\]\])/);
+          parts.forEach((part) => {
+            const m = part.match(/^\[\[qr:(\d+)\]\]$/);
+            if (m && groups[+m[1]] && !used.has(+m[1])) { frag.appendChild(buildGroup(groups[+m[1]], +m[1])); used.add(+m[1]); }
+            else if (!m && part) frag.appendChild(document.createTextNode(part));
+          });
+          node.parentNode.replaceChild(frag, node);
+        });
+      }
     }
     bubble.querySelectorAll('a').forEach((a) => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
+    return used;
   }
 
   function appendMessage(role, content, ts, attachment, quickReplies, summary) {
     const { wrap, bubble } = bubbleFor(role, ts);
+    let usedInline = new Set();
     if (role === 'bot') {
-      fillBotBubble(bubble, content, summary);
+      usedInline = fillBotBubble(bubble, content, summary, quickReplies || []);
     } else {
       bubble.textContent = content;
       if (attachment?.name) {
@@ -471,18 +524,18 @@
         bubble.appendChild(att);
       }
     }
-    if (role === 'bot' && quickReplies) renderQuickReplies(wrap, quickReplies);
+    if (role === 'bot' && quickReplies) renderQuickReplies(wrap, quickReplies, usedInline);
     scrollToBottom();
   }
 
   function typewriterMessage(fullText, ts, quickReplies, summary) {
     const { wrap, bubble } = bubbleFor('bot', ts);
-    const chars = Array.from(summary || fullText);
+    const chars = Array.from((summary || fullText).replace(TOKEN_RE, ''));
     let i = 0, shown = '';
     (function tick() {
       if (i >= chars.length) {
-        fillBotBubble(bubble, fullText, summary);
-        renderQuickReplies(wrap, quickReplies);
+        const usedInline = fillBotBubble(bubble, fullText, summary, quickReplies || []);
+        renderQuickReplies(wrap, quickReplies, usedInline);
         scrollToBottom();
         return;
       }
@@ -563,7 +616,9 @@
     const upload = state.pendingPdf;
     const resultId = state.activeResult?.id;
     if (overrideText === undefined) { input.value = ''; input.style.height = 'auto'; }
-    document.querySelectorAll('.quick-replies').forEach((q) => q.remove());
+    document.querySelectorAll('.quick-replies, .quick-footer').forEach((q) => q.remove());
+    document.querySelectorAll('.quick-group .quick-reply').forEach((b) => { b.disabled = true; });
+    qrState = null;
     removePdf();
     state.isLoading = true;
     $('send-btn').disabled = true;

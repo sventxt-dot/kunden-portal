@@ -52,28 +52,48 @@ export async function predict(flow, { question, chatId, uploads }) {
   return { answer, chatMessageId: data.chatMessageId ?? null, quickReplies };
 }
 
-// Der Operativ-Prompt (Abschnitt 14) beendet Antworten mit offenen Fragen durch einen Block
-//   ```quickreplies
-//   [{"question":"14er Schale – welche Variante?","options":["khaki (Row 22)","mint (Row 23)"]}]
+// Quick-Reply-Blöcke im Antworttext:
+//   ```quickreply            ← ein einzelnes Fragen-Objekt, inline an seiner Stelle (Operator-Ansicht)
+//   {"question":"Wasser – wie aufteilen?","options":["70/30 → 95 + 40","andere Aufteilung"]}
 //   ```
-// Der Block wird aus dem sichtbaren Text entfernt und als Fragen mit Optionen zurückgegeben.
-const QR_BLOCK = /```quickreplies\s*\n([\s\S]*?)```/i;
-const MAX_QUESTIONS = 8;
+//   ```quickreplies          ← Array (Altformat, meist am Ende)
+//   [{"question":…,"options":[…]}, …]
+//   ```
+// Jeder Block wird aus dem Text entfernt. Steht er nicht am Ende, bleibt an seiner Stelle ein
+// Platzhalter [[qr:N]] – das Frontend setzt dort die Buttons ein. Ein Block ganz am Ende
+// (Altformat) bekommt keinen Platzhalter; seine Gruppen werden am Ende der Nachricht gezeigt.
+const QR_BLOCK_ALL = /```quickrepl(?:y|ies)\s*\n([\s\S]*?)```/gi;
+const MAX_QUESTIONS = 12;
 const MAX_OPTIONS = 8;
 const MAX_LEN = 140;
 
 export function extractQuickReplies(text) {
-  const m = text.match(QR_BLOCK);
-  if (!m) return { text, questions: [] };
-  let parsed;
-  try { parsed = JSON.parse(m[1].trim()); } catch { return { text, questions: [] }; }
-  const questions = normalizeQuestions(parsed);
-  const cleaned = text.replace(QR_BLOCK, '').replace(/\n{3,}/g, '\n\n').trim();
+  const questions = [];
+  let out = '';
+  let last = 0;
+  let m;
+  const re = new RegExp(QR_BLOCK_ALL.source, 'gi');
+  while ((m = re.exec(text)) !== null) {
+    let parsed;
+    try { parsed = JSON.parse(m[1].trim()); } catch { parsed = null; }
+    const groups = normalizeQuestions(parsed);
+    const trailing = text.slice(m.index + m[0].length).trim() === '';
+    out += text.slice(last, m.index);
+    if (groups.length && !trailing && questions.length + groups.length <= MAX_QUESTIONS) {
+      const tokens = groups.map((_, k) => `[[qr:${questions.length + k}]]`).join(' ');
+      out += tokens;
+    }
+    if (groups.length && questions.length < MAX_QUESTIONS) questions.push(...groups.slice(0, MAX_QUESTIONS - questions.length));
+    last = m.index + m[0].length;
+  }
+  out += text.slice(last);
+  if (!questions.length) return { text, questions: [] };
+  const cleaned = out.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
   return { text: cleaned, questions };
 }
 
 export function normalizeQuestions(input) {
-  const list = Array.isArray(input) ? input : (input && Array.isArray(input.questions) ? input.questions : []);
+  const list = Array.isArray(input) ? input : (input && Array.isArray(input.questions) ? input.questions : (input && typeof input === 'object' ? [input] : []));
   const out = [];
   for (const q of list) {
     if (!q || typeof q !== 'object') continue;
