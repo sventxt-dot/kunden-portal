@@ -4,7 +4,7 @@
   "private": true,
   "description": "Messerich Catering – Assistenten-Portal (Supabase Auth, Flowise-Proxy, Ergebnis-Historie mit Sharing)",
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": { "node": ">=22" },
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
