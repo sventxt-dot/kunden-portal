@@ -74,6 +74,16 @@ test('fehlt der ❓-Block, wird er vor ✅ angelegt', () => {
   assert.ok(text.indexOf('### ❓ 5') < text.indexOf('### ✅ 3'));
 });
 
+test('mehrere ✅-Listen (z. B. „bereinigt") werden alle geprüft', () => {
+  const twice = SAMPLE + '\n\n### ✅ 2 Artikel klar zugeordnet (bereinigt)\n\n1. Biertulpe → GBP Row 53 | 220 | ok\n2. Tonic → Getränke Row 59 | Menge nach Klärung | Filler\n';
+  const { text, moved } = enforceValidation(twice);
+  assert.equal(moved.length, 6);
+  assert.match(text, /### ✅ 1 Artikel klar zugeordnet \(bereinigt\)/);
+  const second = text.split('(bereinigt)')[1];
+  assert.doesNotMatch(second, /Tonic/);
+  assert.match(text, /### ❓ 8 offene Punkte/);
+});
+
 test('followUpNote nennt die Artikel und ist leer ohne Verschiebungen', () => {
   assert.equal(followUpNote([]), ''); assert.equal(followUpNote(undefined), '');
   assert.match(followUpNote([{ article: 'Radeberger Flasche' }, { article: 'Tonic' }]), /Radeberger Flasche, Tonic.*dürfen nicht in ✅/);

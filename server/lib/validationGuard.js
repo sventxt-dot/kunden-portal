@@ -40,7 +40,21 @@ function articleName(line) {
  * @returns {{ text: string, moved: Array<{article: string, line: string, reasons: string[]}> }}
  */
 export function enforceValidation(text) {
-  const okHead = text.match(OK_HEAD);
+  // Der Agent gibt gelegentlich mehrere ✅-Listen aus (z. B. eine „bereinigte“ Fassung) – alle prüfen.
+  let current = text; const allMoved = [];
+  const seen = new Set();
+  for (let guard = 0; guard < 10; guard++) {
+    const heads = [...current.matchAll(new RegExp(OK_HEAD.source, 'gm'))].map((m) => m[0]).filter((h) => !seen.has(h));
+    if (!heads.length) break;
+    const r = enforceOne(current, heads[0]);
+    seen.add(heads[0]);
+    if (r.moved.length) { current = r.text; allMoved.push(...r.moved); seen.add(r.newHead); }
+  }
+  return { text: current, moved: allMoved };
+}
+
+function enforceOne(text, headLine) {
+  const okHead = headLine.match(OK_HEAD);
   if (!okHead) return { text, moved: [] };
 
   const lines = text.split('\n');
@@ -65,12 +79,13 @@ export function enforceValidation(text) {
     if (reasons.length) moved.push({ article: articleName(l), line: l.replace(ITEM, '').trim(), reasons });
     else kept.push(l);
   }
-  if (!moved.length) return { text, moved }; // veraltete Hinweise nur entfernen, wenn wirklich verschoben wurde
+  if (!moved.length) return { text, moved, newHead: okHead[0] }; // veraltete Hinweise nur entfernen, wenn wirklich verschoben wurde
 
   // ✅-Block neu nummerieren, Zähler setzen
   let n = 0;
   const renumbered = kept.map((l) => (ITEM.test(l) ? l.replace(/^(\s*)\d+\./, (_, sp) => `${sp}${++n}.`) : l));
-  const newOkHead = `${okHead[1]} ✅ ${n} Artikel klar zugeordnet`;
+  const suffix = (okHead[0].match(/Artikel klar zugeordnet(.*)$/) || ['', ''])[1];
+  const newOkHead = `${okHead[1]} ✅ ${n} Artikel klar zugeordnet${suffix}`;
   const note = [
     '',
     `🛡️ **Sicherheitsnetz (Portal):** ${moved.length} Zeile${moved.length > 1 ? 'n' : ''} aus ✅ nach ❓ verschoben, weil Menge oder Row nicht eindeutig war: `
@@ -106,7 +121,7 @@ export function enforceValidation(text) {
     oLines.splice(okIdx, 0, ...block);
     out = oLines;
   }
-  return { text: out.join('\n'), moved };
+  return { text: out.join('\n'), moved, newHead: newOkHead };
 }
 
 // Hinweis für die nächste Nachricht an Flowise, damit der Agent den korrigierten Stand kennt.
