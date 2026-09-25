@@ -111,8 +111,8 @@ before(async () => {
 });
 after(async () => { restMock.close(); flowiseMock.close(); (await import('../server/index.js')).server.close(); });
 
-const api = (path, { token, method = 'GET', body } = {}) =>
-  fetch(base + path, { method, headers: { 'content-type': 'application/json', ...(token ? { authorization: 'Bearer ' + token } : {}) }, body: body ? JSON.stringify(body) : undefined })
+const api = (path, { token, method = 'GET', body, legacy = false } = {}) =>
+  fetch(base + path, { method, headers: { 'content-type': 'application/json', ...(legacy ? {} : { 'x-portal-client': 'test' }), ...(token ? { authorization: 'Bearer ' + token } : {}) }, body: body ? JSON.stringify(body) : undefined })
     .then(async (r) => ({ status: r.status, text: await r.text() }))
     .then((r) => ({ ...r, json: (() => { try { return JSON.parse(r.text); } catch { return null; } })() }));
 
@@ -255,6 +255,19 @@ test('Sicherheitsnetz (operativ): ✅-Zeile mit offener Menge wird nach ❓ vers
   const k = await api('/api/flow/kueche', { method: 'POST', body: { question: 'guardtest kueche' }, token: tokenFor(ALICE) });
   assert.equal(k.json.safetyNet, null);
   assert.match(k.json.answer, /nach Klärung ❓1/);
+});
+
+test('Legacy-Client ohne X-Portal-Client: Hinweis statt Strukturdaten, Speicherung unverändert', async () => {
+  const r = await api('/api/flow/operativ', { method: 'POST', body: { question: 'summarytest' }, token: tokenFor(ALICE), legacy: true });
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.json.legacyClient, true);
+  assert.equal(r.json.quickReplies, null); assert.equal(r.json.summary, null);
+  assert.match(r.json.answer, /^⚠️ \*\*Bitte die Portal-Seite einmal neu laden/);
+  assert.ok(!('quick_replies' in r.json.result.output_data.messages.at(-1)), 'keine Objekte an alten Client');
+  assert.ok(!('summary' in r.json.result.output_data.messages.at(-1)));
+  // in der DB (Mock) liegen die Strukturdaten trotzdem
+  assert.deepEqual(db.results.at(-1).output_data.messages.at(-1).quick_replies, [{ question: 'Bier – Aufteilung?', options: ['70/30 → 129 + 55', 'andere Aufteilung (Freitext)'] }]);
+  seen.flowise.length = 0; seen.rest.length = 0;
 });
 
 test('Flowise followUpPrompts werden als quick_replies gespeichert und zurückgegeben', async () => {

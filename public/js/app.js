@@ -69,7 +69,7 @@
     if (!session) throw new Error('Nicht angemeldet.');
     const res = await fetch(path, {
       ...options,
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token, ...(options.headers || {}) },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token, 'X-Portal-Client': LOADED_VERSION || 'unknown', ...(options.headers || {}) },
     });
     checkVersion(res);
     let body = null;

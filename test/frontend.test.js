@@ -55,13 +55,13 @@ before(async () => {
   dom = new JSDOM(html, { runScripts: 'outside-only', url: 'https://portal.test/' });
   win = dom.window; doc = win.document;
   win.__shares = [{ result_id: SHARED.id, shared_with_id: ME, shared_by_id: BOB, created_at: '2026-09-25T09:02:00Z' }];
-  win.PORTAL_CONFIG = { supabaseUrl: 'https://sb.test', supabaseAnonKey: 'anon', flows: [
+  win.PORTAL_CONFIG = { supabaseUrl: 'https://sb.test', supabaseAnonKey: 'anon', version: 'test', flows: [
     { type: 'kueche', name: 'Küchen-Assistent', description: 'Einkauf', icon: '🍽️', color: '#f5eaec' },
     { type: 'operativ', name: 'Operativer Assistent', description: 'Packliste', icon: '📋', color: '#eaf0f5' } ] };
   win.supabase = makeSupabaseMock();
   win.marked = { parse: (t) => '<p>' + t.replace(/</g, '&lt;') + '</p>' };
   sent = [];
-  win.fetch = async (url, opts) => { sent.push({ url, body: JSON.parse(opts.body) }); return { status: 200, ok: true, json: async () => ({ resultId: RESULT.id, answer: 'Danke, übernommen.', quickReplies: null, result: RESULT }) }; };
+  win.fetch = async (url, opts) => { sent.push({ url, body: JSON.parse(opts.body), headers: opts.headers }); return { status: 200, ok: true, json: async () => ({ resultId: RESULT.id, answer: 'Danke, übernommen.', quickReplies: null, result: RESULT }) }; };
   win.confirm = () => true;
   win.eval(fs.readFileSync(path.resolve('public/js/app.js'), 'utf8'));
   authCb('SIGNED_IN', { user: { id: ME, email: 'me@test.local' } });
@@ -130,6 +130,7 @@ test('Klick markiert Option, Sammel-Senden schickt „Meine Antworten" mit resul
   assert.equal(sent.length, 1);
   assert.equal(sent[0].url, '/api/flow/operativ');
   assert.equal(sent[0].body.resultId, RESULT.id);
+  assert.equal(sent[0].headers['X-Portal-Client'], 'test', 'Client sendet seine Version');
   assert.equal(sent[0].body.question, 'Meine Antworten:\n- 14er Schale – welche Variante? → khaki (Row 22)\n- Servietten – welche Farbe? → schwarz (Row 79)');
   assert.equal(doc.querySelectorAll('.quick-replies').length, 0, 'alte Buttons nach dem Senden entfernt');
 });

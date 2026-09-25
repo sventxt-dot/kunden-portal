@@ -121,6 +121,13 @@ router.post('/:type', async (req, res, next) => {
       row = data;
     }
 
+    // Alte, nie neu geladene Browser-Tabs senden keine Client-Kennung. Sie kennen weder Fragegruppen
+    // noch Kurzfassung und würden Objekte als „[object Object]“ rendern → Hinweis statt Strukturdaten.
+    if (!req.get('X-Portal-Client')) {
+      const hint = '⚠️ **Bitte die Portal-Seite einmal neu laden (F5 bzw. ⌘R).** Ihre Ansicht ist veraltet; die Antwort-Buttons und die Kurzfassung erscheinen erst nach dem Neuladen.\n\n';
+      const legacyRow = { ...row, output_data: { ...row.output_data, messages: (row.output_data?.messages || []).map(({ quick_replies, summary: _s, ...m }) => m) } };
+      return res.json({ resultId: row.id, answer: hint + answer, summary: null, quickReplies: null, safetyNet, legacyClient: true, result: legacyRow });
+    }
     return res.json({ resultId: row.id, answer, summary, quickReplies: botMessage.quick_replies || null, safetyNet, result: row });
   } catch (err) {
     if (err instanceof FlowiseError) {
