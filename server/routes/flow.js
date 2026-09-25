@@ -58,7 +58,7 @@ router.post('/:type', async (req, res, next) => {
       ? [{ data: upload.text, mime: 'application/pdf', name: upload.name, type: 'file:full' }]
       : undefined;
 
-    const { answer } = await predict(flow, {
+    const { answer, followUpPrompts } = await predict(flow, {
       question: question || 'Bitte analysiere das angehängte PDF.',
       chatId,
       uploads,
@@ -71,7 +71,12 @@ router.post('/:type', async (req, res, next) => {
       ts: now,
       ...(upload ? { attachment: { name: upload.name, size: upload.size ?? null, pages: upload.pages ?? null } } : {}),
     };
-    const botMessage = { role: 'bot', content: answer, ts: new Date().toISOString() };
+    // quick_replies: nur wenn Flowise eigene Follow-up-Prompts liefert; sonst parst das Frontend
+    // Rückfragen/Optionen aus dem Text (parseQuickReplies in public/js/app.js).
+    const botMessage = {
+      role: 'bot', content: answer, ts: new Date().toISOString(),
+      ...(followUpPrompts.length ? { quick_replies: followUpPrompts } : {}),
+    };
 
     let row;
     if (existing) {
@@ -93,7 +98,7 @@ router.post('/:type', async (req, res, next) => {
       row = data;
     }
 
-    return res.json({ resultId: row.id, answer, result: row });
+    return res.json({ resultId: row.id, answer, quickReplies: botMessage.quick_replies || null, result: row });
   } catch (err) {
     if (err instanceof FlowiseError) {
       console.error('[flow] Flowise-Fehler:', err.message, err.detail || '');

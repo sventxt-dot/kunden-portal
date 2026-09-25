@@ -257,7 +257,64 @@
       if (f) appendMessage('bot', `Hallo! Ich bin der ${f.name} von Messerich Catering. ${f.description}. Wie kann ich dir helfen?`, new Date().toISOString());
       return;
     }
-    (r.output_data?.messages || []).forEach((m) => appendMessage(m.role, m.content, m.ts, m.attachment));
+    const msgs = r.output_data?.messages || [];
+    msgs.forEach((m, i) => appendMessage(m.role, m.content, m.ts, m.attachment, i === msgs.length - 1 ? (m.quick_replies || parseQuickReplies(m.content)) : null));
+    scrollToBottom();
+  }
+
+  // ---------- Quick Replies ----------
+  // Rückfragen / Optionen des Assistenten als klickbare Buttons ("click to continue").
+  // Quelle 1: Flowise Follow-up-Prompts (message.quick_replies, vom Server durchgereicht).
+  // Quelle 2: Fallback-Parser über den Antworttext: der letzte Listenblock (•, -, 1.) mit
+  //           2–6 kurzen Einträgen, oder bis zu 4 kurze Fragezeilen am Ende der Antwort.
+  function parseQuickReplies(text) {
+    if (!text) return [];
+    const lines = String(text).split('\n').map((l) => l.trim());
+    const clean = (l) => l.replace(/^(?:[-*•]|\d+[.)]|[a-z][.)])\s+/i, '').replace(/\*\*/g, '').replace(/[.]\s*$/, '').trim();
+    const isItem = (l) => /^(?:[-*•]|\d+[.)]|[a-z][.)])\s+\S/i.test(l);
+    const short = (l) => l.length >= 2 && l.length <= 90;
+    const cue = /\?\s*$|option|möglichkeit|wähl|möchtest|willst|soll ich|sollen wir|weiter|vorschl|auswahl|alternativ/i;
+
+    // 1) Kurze Fragezeilen am Ende der Antwort
+    const tailRaw = [];
+    for (let i = lines.length - 1; i >= 0 && tailRaw.length < 6; i--) {
+      const l = lines[i];
+      if (l === '') { if (tailRaw.length) break; continue; }
+      if (/\?$/.test(l) && short(clean(l)) && !/^#/.test(l)) tailRaw.unshift(l); else break;
+    }
+    // Sind Listenpunkte dabei, zählen nur die (die Einleitungsfrage davor ist keine Option)
+    const tail = (tailRaw.some(isItem) ? tailRaw.filter(isItem) : tailRaw).map(clean).slice(0, 6);
+    if (tail.length) return tail;
+
+    // 2) Abschließender Listenblock (2–6 kurze Einträge), dem eine Auswahl-Frage vorausgeht
+    let i = lines.length - 1;
+    while (i >= 0 && lines[i] === '') i--;
+    const block = [];
+    while (i >= 0 && isItem(lines[i])) { block.unshift(lines[i]); i--; }
+    while (i >= 0 && lines[i] === '') i--;
+    const lead = i >= 0 ? lines[i] : '';
+    const items = block.map(clean).filter(short);
+    const itemsAreQuestions = items.length && items.every((x) => /\?$/.test(x));
+    if (items.length >= 2 && items.length <= 6 && items.length === block.length && (itemsAreQuestions || cue.test(lead))) return items;
+    return [];
+  }
+
+  function renderQuickReplies(bubbleWrap, replies) {
+    document.querySelectorAll('.quick-replies').forEach((q) => q.remove());
+    const r = state.activeResult;
+    const readonly = !!r && !isOwner(r);
+    if (!replies?.length || readonly || !state.activeFlow) return;
+    const box = document.createElement('div');
+    box.className = 'quick-replies';
+    replies.forEach((txt) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'quick-reply';
+      b.textContent = txt;
+      b.addEventListener('click', () => { if (!state.isLoading) sendMessage(txt); });
+      box.appendChild(b);
+    });
+    bubbleWrap.querySelector('.msg-bubble').parentNode.appendChild(box);
     scrollToBottom();
   }
 
@@ -281,8 +338,8 @@
     return { wrap, bubble };
   }
 
-  function appendMessage(role, content, ts, attachment) {
-    const { bubble } = bubbleFor(role, ts);
+  function appendMessage(role, content, ts, attachment, quickReplies) {
+    const { wrap, bubble } = bubbleFor(role, ts);
     if (role === 'bot') {
       bubble.innerHTML = renderMd(content);
       bubble.querySelectorAll('a').forEach((a) => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
@@ -295,17 +352,19 @@
         bubble.appendChild(att);
       }
     }
+    if (role === 'bot' && quickReplies) renderQuickReplies(wrap, quickReplies);
     scrollToBottom();
   }
 
-  function typewriterMessage(fullText, ts) {
-    const { bubble } = bubbleFor('bot', ts);
+  function typewriterMessage(fullText, ts, quickReplies) {
+    const { wrap, bubble } = bubbleFor('bot', ts);
     const chars = Array.from(fullText);
     let i = 0, shown = '';
     (function tick() {
       if (i >= chars.length) {
         bubble.innerHTML = renderMd(fullText);
         bubble.querySelectorAll('a').forEach((a) => { a.target = '_blank'; a.rel = 'noopener noreferrer'; });
+        renderQuickReplies(wrap, quickReplies || parseQuickReplies(fullText));
         scrollToBottom();
         return;
       }
@@ -372,15 +431,16 @@
   input.addEventListener('input', function () { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 120) + 'px'; });
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
 
-  async function sendMessage() {
-    const text = input.value.trim();
+  async function sendMessage(overrideText) {
+    const text = overrideText !== undefined ? String(overrideText).trim() : input.value.trim();
     const flow = state.activeFlow;
     if ((!text && !state.pendingPdf) || state.isLoading || !flow) return;
     if (state.activeResult && !isOwner(state.activeResult)) { toast('Geteilte Ergebnisse sind schreibgeschützt.', true); return; }
 
     const upload = state.pendingPdf;
     const resultId = state.activeResult?.id;
-    input.value = ''; input.style.height = 'auto';
+    if (overrideText === undefined) { input.value = ''; input.style.height = 'auto'; }
+    document.querySelectorAll('.quick-replies').forEach((q) => q.remove());
     removePdf();
     state.isLoading = true;
     $('send-btn').disabled = true;
@@ -404,7 +464,7 @@
       $('share-btn').hidden = false;
       renderAgents();
       renderArchive();
-      typewriterMessage(data.answer, new Date().toISOString());
+      typewriterMessage(data.answer, new Date().toISOString(), data.quickReplies);
     } catch (err) {
       removeTyping();
       appendMessage('bot', 'Der Assistent konnte nicht antworten.\n\nDetails: ' + err.message, new Date().toISOString());

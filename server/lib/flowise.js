@@ -45,7 +45,16 @@ export async function predict(flow, { question, chatId, uploads }) {
 
   const data = await res.json();
   const answer = data.text ?? data.answer ?? data.output ?? JSON.stringify(data);
-  return { answer: String(answer), chatMessageId: data.chatMessageId ?? null };
+  return { answer: String(answer), chatMessageId: data.chatMessageId ?? null, followUpPrompts: parseFollowUps(data.followUpPrompts) };
+}
+
+// Flowise-Feature "Follow-up Prompts": kommt als JSON-String oder Array zurück.
+function parseFollowUps(raw) {
+  if (!raw) return [];
+  let list = raw;
+  if (typeof raw === 'string') { try { list = JSON.parse(raw); } catch { return []; } }
+  if (!Array.isArray(list)) return [];
+  return list.map((x) => (typeof x === 'string' ? x : x?.prompt ?? x?.text ?? '')).map((x) => String(x).trim()).filter(Boolean).slice(0, 6);
 }
 
 // Best effort: Chat-Verlauf in Flowise löschen, wenn der Owner ein Ergebnis löscht.

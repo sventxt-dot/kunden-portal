@@ -322,3 +322,12 @@
   .msg { max-width: 92%; }
   .messages, .input-area, .chat-header { padding-left: 16px; padding-right: 16px; }
 }
+
+/* Quick Replies (Rückfragen als Buttons) */
+.quick-replies { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.quick-reply {
+  background: var(--surface); color: var(--primary); border: 1.5px solid var(--primary);
+  border-radius: 999px; padding: 6px 12px; font-size: .82rem; font-weight: 600; cursor: pointer;
+  font-family: inherit; text-align: left; transition: background .15s, color .15s; max-width: 100%;
+}
+.quick-reply:hover { background: var(--primary); color: #fff; }

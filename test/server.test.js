@@ -72,7 +72,8 @@ const flowiseMock = http.createServer(async (req, res) => {
   if (req.method === 'DELETE') { res.writeHead(200); return res.end('{}'); }
   if (flowiseMode === 'fail') { res.writeHead(500); return res.end('boom'); }
   res.writeHead(200, { 'content-type': 'application/json' });
-  res.end(JSON.stringify({ text: 'Antwort auf: ' + body.question, chatMessageId: 'cm1', chatId: body.chatId }));
+  const extra = /followups/.test(body.question) ? { followUpPrompts: JSON.stringify(['Option A?', 'Option B?']) } : {};
+  res.end(JSON.stringify({ text: 'Antwort auf: ' + body.question, chatMessageId: 'cm1', chatId: body.chatId, ...extra }));
 });
 
 let base;
@@ -169,6 +170,16 @@ test('PDF-Upload wird als file:full an Flowise gereicht', async () => {
   assert.equal(r.json.result.title, 'event.pdf');
   assert.equal(r.json.result.input_summary, 'PDF: event.pdf');
   assert.deepEqual(r.json.result.output_data.messages[0].attachment, { name: 'event.pdf', size: 1234, pages: 2 });
+});
+
+test('Flowise followUpPrompts werden als quick_replies gespeichert und zurückgegeben', async () => {
+  const r = await api('/api/flow/kueche', { method: 'POST', body: { question: 'bitte followups' }, token: tokenFor(ALICE) });
+  assert.equal(r.status, 200, r.text);
+  assert.deepEqual(r.json.quickReplies, ['Option A?', 'Option B?']);
+  assert.deepEqual(r.json.result.output_data.messages.at(-1).quick_replies, ['Option A?', 'Option B?']);
+  const plain = await api('/api/flow/kueche', { method: 'POST', body: { question: 'ohne' }, token: tokenFor(ALICE) });
+  assert.equal(plain.json.quickReplies, null);
+  assert.equal(plain.json.result.output_data.messages.at(-1).quick_replies, undefined);
 });
 
 test('Folgefrage im eigenen Chat hängt Nachrichten an (UPDATE), gleiche chatId', async () => {
