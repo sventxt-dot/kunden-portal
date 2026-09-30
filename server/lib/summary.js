@@ -28,15 +28,17 @@ export function splitOperatorSummary(text, safetyNet) {
 // Konsistenz: Jede Inline-Frage soll zu einem ❓-Punkt gehören (gleicher Artikelname).
 // Liefert die Fragen, deren Artikel im ❓-Block nicht vorkommt – nur zum Loggen/Testen.
 export function questionsWithoutOpenPoint(text, questions) {
+  // Bestätigungen (Block 2, Vorschläge, Annahmen, Eventname, Sicherheitsnetz) haben keinen eigenen ❓-Punkt
+  const needsPoint = (q) => !/^block.?2|^vorschlag|^annahmen|^eventname|^ohne artikel|wie weiter\?$/i.test(q);
   const m = text.match(OPEN_HEAD);
-  if (!m) return questions.map((q) => q.question);
+  if (!m) return questions.map((q) => q.question).filter(needsPoint);
   const blockOf = (head) => { const from = text.indexOf(head) + head.length; const rest = text.slice(from); const cut = rest.search(/\n#{1,3}\s/); return (cut > -1 ? rest.slice(0, cut) : rest).toLowerCase(); };
   const warn = text.match(/^#{2,4}\s*⚠️[^\n]*$/m);
   const block = blockOf(m[0]) + (warn ? blockOf(warn[0]) : '');
   const key = (q) => q.split(/\s[–—-]\s|\?|:/)[0].replace(/^(Anzahl|Vorschlag\s*\d+|Block.?2)\s*/i, '').trim().toLowerCase();
   return questions.map((q) => q.question).filter((q) => {
     const k = key(q);
-    if (!k || /^block.?2|^vorschlag|^annahmen|^eventname|wie weiter\?$/i.test(q)) return false; // Bestätigungen ohne eigenen ❓-Punkt
+    if (!k || !needsPoint(q)) return false;
     return !block.includes(k.split(' ')[0]);
   });
 }

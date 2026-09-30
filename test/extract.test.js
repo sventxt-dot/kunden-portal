@@ -53,3 +53,9 @@ test('Frage-Vertrag: other / multi / default bleiben erhalten, „(Freitext)“-
   assert.deepEqual(out[3], { question: 'Eventname „X_21.05.2026“ – passt?', options: ['passt'], other: 'anderer Name', default: 0 });
   assert.equal(out.length, 5); assert.equal(out[4].default, undefined);
 });
+
+test('Konsistenz-Check: Block-2-/Annahmen-/Sammelfragen zählen nie als verwaist, auch ohne ❓-Block', () => {
+  const qs = [{ question: 'Block 2 – alle Vorschläge?' }, { question: 'Vorschlag 1 – Bars → Barwerkzeug?' }, { question: 'Annahmen – passen sie so?' }, { question: 'Ohne Artikel im Bestand – welche nennen?' }, { question: 'Flaschenöffner – wie weiter?' }];
+  assert.deepEqual(questionsWithoutOpenPoint('kein Validierungsteil', qs), []);
+  assert.deepEqual(questionsWithoutOpenPoint('kein Validierungsteil', [...qs, { question: 'Bier – wie aufteilen?' }]), ['Bier – wie aufteilen?']);
+});
