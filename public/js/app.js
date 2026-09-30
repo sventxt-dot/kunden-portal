@@ -311,6 +311,8 @@
     return { text: String(text).replace(QR_BLOCK, '').replace(/\n{3,}/g, '\n\n').trim(), groups };
   }
 
+  const VARIETY_RE = /\bSorte\(n\)|\bSorten\b|\bwelche\s+Sorte\b|Geschmacksrichtung|\bwelche\s+(?:Produkte|Marken|Säfte|Schorlen|Saftschorlen|Softdrinks|Weine|Biere|Cocktails|Drinks)\b/i;
+
   function normalizeGroups(input) {
     if (!input) return [];
     if (Array.isArray(input) && input.every((x) => typeof x === 'string')) {
@@ -331,6 +333,8 @@
         if (other) g.other = other;
         if (q.multi === true) g.multi = true;
         if (Number.isInteger(q.default) && q.default >= 0 && q.default < options.length) g.default = q.default;
+        // Sortenfragen sind immer Mehrfachauswahl (gleiche Regel wie server/lib/flowise.js isVarietyQuestion)
+        if (!g.multi && !Number.isInteger(g.default) && options.length >= 2 && !/aufteil/i.test(g.question) && VARIETY_RE.test(g.question)) g.multi = true;
         out.push(g);
       }
     });

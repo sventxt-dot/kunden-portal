@@ -92,6 +92,17 @@ export function extractQuickReplies(text) {
   return { text: cleaned, questions };
 }
 
+// Sortenauswahl („welche Sorte(n)?“, „welche Sorten/Produkte/Marken?“): eine Bestellung umfasst realistisch
+// mehrere Sorten → Mehrfachauswahl, auch wenn der Agent das Feld vergisst. Nicht für Aufteilungsfragen
+// (Verhältnis-Presets), Bestätigungen mit Vorauswahl und echte Entweder-oder-Fragen (Variante, Farbe, Gerät).
+const VARIETY_RE = /\bSorte\(n\)|\bSorten\b|\bwelche\s+Sorte\b|Geschmacksrichtung|\bwelche\s+(?:Produkte|Marken|Säfte|Schorlen|Saftschorlen|Softdrinks|Weine|Biere|Cocktails|Drinks)\b/i;
+export function isVarietyQuestion(g) {
+  if (!g || g.multi || Number.isInteger(g.default)) return false;
+  if (!Array.isArray(g.options) || g.options.length < 2) return false;
+  if (/aufteil/i.test(g.question)) return false;
+  return VARIETY_RE.test(g.question);
+}
+
 // Frage-Vertrag: { question, options[], other?, multi?, default? }
 //   other   – Beschriftung eines Zusatz-Buttons, der ein Eingabefeld direkt an der Frage öffnet
 //   multi   – true: mehrere Optionen wählbar (Toggle-Buttons)
@@ -114,6 +125,7 @@ export function normalizeQuestions(input) {
       if (other) g.other = other;
       if (q.multi === true) g.multi = true;
       if (Number.isInteger(q.default) && q.default >= 0 && q.default < unique.length) g.default = q.default;
+      if (isVarietyQuestion(g)) g.multi = true; // Sortenfragen sind immer Mehrfachauswahl (deterministische Absicherung)
       out.push(g);
     }
     if (out.length >= MAX_QUESTIONS) break;

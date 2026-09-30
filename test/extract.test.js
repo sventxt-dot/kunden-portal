@@ -59,3 +59,18 @@ test('Konsistenz-Check: Block-2-/Annahmen-/Sammelfragen zählen nie als verwaist
   assert.deepEqual(questionsWithoutOpenPoint('kein Validierungsteil', qs), []);
   assert.deepEqual(questionsWithoutOpenPoint('kein Validierungsteil', [...qs, { question: 'Bier – wie aufteilen?' }]), ['Bier – wie aufteilen?']);
 });
+
+test('Sortenfragen werden Mehrfachauswahl; Entweder-oder, Aufteilung und Bestätigung bleiben Einfachauswahl', async () => {
+  const { normalizeQuestions } = await import('../server/lib/flowise.js');
+  const q = (question, extra = {}) => normalizeQuestions([{ question, options: ['A', 'B', 'C'], ...extra }])[0];
+  for (const multi of ['Saftschorlen – welche Sorte(n)?', 'Softdrinks – welche Sorten?', 'Bier – welche Sorten?', 'Weißwein – welche Sorte(n)?', 'Wein – welche Sorte?',
+    'Wasser – welche Sorte(n) und Gebinde?', 'Tee – welche Geschmacksrichtungen?', 'Fritz – welche Produkte?', 'Bar – welche Cocktails sollen angeboten werden?']) {
+    assert.equal(q(multi).multi, true, multi);
+  }
+  for (const single of ['Glas von uns oder via KING?', 'Menuteller – welche Variante?', 'Servietten – welche Farbe?', 'Espresso-Gerät – welches?', 'Pepsi Glasflasche – Row 15 oder Row 16?',
+    'Bier – wie aufteilen auf Radeberger und Clausthaler?', 'Rot/Rosé – welche Sorten und wie aufteilen?', 'Anzahl Martini – wie viele Drinks?', 'Cocktailglas – welcher Typ?']) {
+    assert.equal(q(single).multi, undefined, single);
+  }
+  assert.equal(q('Wein – welche Sorte(n), passt der Vorschlag?', { default: 0 }).multi, undefined, 'Bestätigung mit Vorauswahl bleibt einfach');
+  assert.equal(q('Softdrinks – welche Sorten?', { multi: true }).multi, true);
+});

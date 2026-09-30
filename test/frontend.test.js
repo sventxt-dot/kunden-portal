@@ -45,6 +45,15 @@ const CONTRACT = { ...RESULT, id: '66666666-0000-4000-8000-000000000006', title:
       { question: 'Bier – wie aufteilen?', options: ['80/20 → 147 + 37', '70/30 → 129 + 55'], other: 'andere Aufteilung' },
     ] },
 ] } };
+const VARIETY = { ...RESULT, id: '77777777-0000-4000-8000-000000000007', title: 'Sortenfragen', output_data: { chat_id: 'c7', messages: [
+  { role: 'user', content: 'x', ts: '2026-09-25T09:00:00Z' },
+  { role: 'bot', ts: '2026-09-25T09:01:00Z', content: '### ✅ 1 Artikel klar zugeordnet\n1. A → GBP Row 1 | 1 | ok\n\n## 📋 Operator-Ansicht\n\nx',
+    summary: '### Bestellung laut Function Sheet\n- **Saftschorlen:** laut Sheet\n[[qr:0]]\n- **Gläser:** Herkunft klären\n[[qr:1]]',
+    quick_replies: [
+      { question: 'Saftschorlen – welche Sorte(n)?', options: ['Apfelschorle', 'Rhabarberschorle', 'Traubenschorle'] },
+      { question: 'Glas von uns oder via KING?', options: ['von uns', 'via KING'] },
+    ] },
+] } };
 const WITH_SUMMARY = { ...RESULT, id: '33333333-0000-4000-8000-000000000003', title: 'Mit Kurzfassung', output_data: { chat_id: 'c3', messages: [
   { role: 'user', content: 'Packliste bitte', ts: '2026-09-25T09:00:00Z' },
   { role: 'bot', ts: '2026-09-25T09:01:00Z', content: '## BLOCK 1\n| Getränk | Formel |\n|---|---|\n| Bier | 0,25 × 220 |\n\n### ✅ 3 Artikel klar zugeordnet\n1. Biertulpe → GBP Row 53 | 220 | ok\n\n## 📋 Kurzfassung\n\nValidierung fertig – 1 Frage unten per Klick.',
@@ -57,7 +66,7 @@ function makeSupabaseMock() {
     const q = { _f: {}, select() { return q; }, order() { return q; }, eq(k, v) { q._f[k] = v; return q; },
       insert(row) { q._ins = row; return q; }, single() { return q; },
       then(res) {
-        if (name === 'results') return res({ data: [RESULT, SHARED, WITH_SUMMARY, INLINE, MANY, CONTRACT], error: null });
+        if (name === 'results') return res({ data: [RESULT, SHARED, WITH_SUMMARY, INLINE, MANY, CONTRACT, VARIETY], error: null });
         if (name === 'result_shares') {
           if (q._ins) { win.__shares.push({ ...q._ins, created_at: new Date().toISOString() }); return res({ data: win.__shares.at(-1), error: null }); }
           return res({ data: [...win.__shares], error: null });
@@ -93,9 +102,25 @@ before(async () => {
 
 test('Verlauf zeigt eigenes und geteiltes Ergebnis mit Badges', () => {
   const items = [...doc.querySelectorAll('.archive-item')];
-  assert.equal(items.length, 6);
+  assert.equal(items.length, 7);
   assert.ok(items.some((i) => i.textContent.includes('von Bob')), 'Badge "von Bob" fehlt');
-  assert.equal(doc.querySelectorAll('.archive-item .archive-del-btn').length, 5, 'Löschen nur bei eigenen Ergebnissen');
+  assert.equal(doc.querySelectorAll('.archive-item .archive-del-btn').length, 6, 'Löschen nur bei eigenen Ergebnissen');
+});
+
+test('Sortenfrage ohne multi-Feld (gespeicherte Nachricht) → Mehrfachauswahl; Entweder-oder bleibt einfach', async () => {
+  [...doc.querySelectorAll('.archive-item')].find((i) => i.textContent.includes('Sortenfragen')).click();
+  await new Promise((r) => setTimeout(r, 10));
+  const groups = [...doc.querySelectorAll('.msg-summary .quick-group')];
+  assert.equal(groups.length, 2);
+  assert.match(groups[0].querySelector('.quick-question').textContent, /Saftschorlen – welche Sorte\(n\)\? \(Mehrfachauswahl\)/);
+  assert.doesNotMatch(groups[1].querySelector('.quick-question').textContent, /Mehrfachauswahl/);
+  const sorts = groups[0].querySelectorAll('.quick-reply'); sorts[0].click(); sorts[1].click(); sorts[2].click(); sorts[1].click(); // drei an, eine wieder aus
+  assert.deepEqual([...sorts].map((b) => b.classList.contains('selected')), [true, false, true]);
+  const glas = groups[1].querySelectorAll('.quick-reply'); glas[0].click(); glas[1].click();
+  assert.deepEqual([...glas].map((b) => b.classList.contains('selected')), [false, true], 'Einfachauswahl ersetzt');
+  const before = sent.length; doc.querySelector('.quick-send').click(); await new Promise((r) => setTimeout(r, 30));
+  assert.equal(sent.length, before + 1);
+  assert.equal(sent.at(-1).body.question, 'Meine Antworten:\n- Saftschorlen – welche Sorte(n)? → Apfelschorle, Traubenschorle\n- Glas von uns oder via KING? → via KING');
 });
 
 test('Frage-Vertrag: Vorauswahl, Mehrfachauswahl und Eingabefeld direkt an der Frage', async () => {
