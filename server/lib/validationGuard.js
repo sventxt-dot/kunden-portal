@@ -97,7 +97,7 @@ function enforceOne(text, headLine) {
   // ❓-Block ergänzen (existiert er nicht, vor dem ✅-Block anlegen – Prompt-Reihenfolge ❓ → ✅)
   const joined = out.join('\n');
   const openHead = joined.match(OPEN_HEAD);
-  const extra = moved.map((m) => `[D] **${m.article} – Menge/Row offen?** ${m.line} *(Sicherheitsnetz: aus ✅ verschoben – ${m.reasons.join(', ')})*`);
+  const extra = moved.map((m) => `[C] **${m.article} – Menge/Zuordnung offen?** ${m.line} *(Sicherheitsnetz: aus ✅ verschoben – ${m.reasons.join(', ')})*`);
   if (openHead) {
     const oLines = joined.split('\n');
     const oIdx = oLines.findIndex((l) => l === openHead[0]);
@@ -130,4 +130,18 @@ export function followUpNote(moved) {
   return `[Hinweis Portal-Sicherheitsnetz: In der letzten Validierung wurden ${moved.length} Artikel aus ✅ nach ❓ verschoben, weil Menge oder Row nicht eindeutig war: `
     + moved.map((m) => m.article).join(', ')
     + `. Diese Artikel gelten als offen (❓) und dürfen nicht in ✅ oder in ein Items-Array, bis der Operator sie klärt.]\n\n`;
+}
+
+// Klickbare Fragen für verschobene Artikel (kein Freitext): Vorschlag übernehmen, weglassen oder Wert eingeben.
+export function guardQuestions(moved) {
+  return (moved || []).map((m) => {
+    const parts = m.line.split('|').map((x) => x.trim());
+    const qty = (parts[1] || '').match(/^\*{0,2}(\d[\d.,]*\s*(?:Stück|Stk\.?|Fl\.?|Flaschen|kg|L|l|Packungen|Pack)?)\*{0,2}$/);
+    const singleRow = /\bRow\s*\d+\b/.test(parts[0] || '') && !/\bRow\s*\d+\s*(?:[\/–—-]|oder|,)\s*\d+/i.test(parts[0] || '');
+    const options = [];
+    if (qty && singleRow) options.push(`wie vorgeschlagen übernehmen (${qty[1].trim()})`);
+    options.push('nicht in die Packliste');
+    options.push('später klären');
+    return { question: `${m.article} – wie weiter?`, options, other: qty ? 'andere Menge' : 'Menge/Variante angeben' };
+  });
 }

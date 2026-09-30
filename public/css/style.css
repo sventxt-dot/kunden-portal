@@ -359,3 +359,11 @@
 .quick-reply:disabled { opacity: .45; cursor: default; }
 .pref-row { display: flex; align-items: center; gap: 6px; padding: 6px 16px 12px; font-size: .75rem; color: var(--muted); cursor: pointer; }
 .pref-row input { accent-color: var(--primary); }
+
+/* Frage-Vertrag: Eingabefeld an der Frage, Mehrfachauswahl, Vorauswahl */
+.quick-other { border-style: dashed; }
+.quick-other-input {
+  margin-top: 6px; width: 100%; max-width: 360px; padding: 7px 10px; border: 1.5px solid var(--primary);
+  border-radius: 8px; font-size: .85rem; font-family: inherit; outline: none; background: var(--surface);
+}
+.quick-other-input[hidden] { display: none; }

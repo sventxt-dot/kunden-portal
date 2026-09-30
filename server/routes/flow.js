@@ -11,7 +11,7 @@ import { randomUUID } from 'node:crypto';
 import { config } from '../lib/config.js';
 import { supabaseForUser } from '../lib/supabase.js';
 import { predict, FlowiseError } from '../lib/flowise.js';
-import { enforceValidation, followUpNote } from '../lib/validationGuard.js';
+import { enforceValidation, followUpNote, guardQuestions } from '../lib/validationGuard.js';
 import { splitOperatorSummary, questionsWithoutOpenPoint } from '../lib/summary.js';
 
 const router = Router();
@@ -70,7 +70,7 @@ router.post('/:type', async (req, res, next) => {
       uploads,
     });
     let { answer } = flowiseResult;
-    const { quickReplies } = flowiseResult;
+    let { quickReplies } = flowiseResult;
     let safetyNet = null;
     let summary = null;
     if (flow.type === 'operativ') {
@@ -84,6 +84,13 @@ router.post('/:type', async (req, res, next) => {
       const split = splitOperatorSummary(answer, safetyNet);
       summary = split.summary;
       answer = split.details;
+      // Verschobene Artikel bekommen klickbare Fragen direkt unter dem 🛡️-Hinweis (kein Freitext)
+      if (summary && guarded.moved.length) {
+        const extra = guardQuestions(guarded.moved).slice(0, Math.max(0, 20 - quickReplies.length));
+        const base = quickReplies.length;
+        quickReplies = [...quickReplies, ...extra];
+        summary += '\n\n' + extra.map((_, k) => `[[qr:${base + k}]]`).join('\n\n');
+      }
       if (summary && quickReplies.length) {
         const orphan = questionsWithoutOpenPoint(answer, quickReplies);
         if (orphan.length) console.warn('[view] Inline-Fragen ohne ❓-Punkt: %s', orphan.join(' | '));

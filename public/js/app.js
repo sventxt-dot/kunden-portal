@@ -321,8 +321,18 @@
     const out = [];
     list.forEach((q) => {
       if (!q || typeof q !== 'object') return;
-      const options = (Array.isArray(q.options) ? q.options : []).map((o) => (typeof o === 'string' ? o : o?.label || '')).map((o) => String(o).trim()).filter(Boolean);
-      if (options.length >= 2) out.push({ question: String(q.question || '').trim(), options: [...new Set(options)].slice(0, 8) });
+      let options = (Array.isArray(q.options) ? q.options : []).map((o) => (typeof o === 'string' ? o : o?.label || '')).map((o) => String(o).trim()).filter(Boolean);
+      let other = typeof q.other === 'string' ? q.other.trim() : '';
+      const legacy = options.find((o) => /\(Freitext\)\s*$/i.test(o));
+      if (legacy) { options = options.filter((o) => o !== legacy); if (!other) other = legacy.replace(/\s*\(Freitext\)\s*$/i, ''); }
+      options = [...new Set(options)].slice(0, 8);
+      if (options.length >= 2 || (options.length >= 1 && other)) {
+        const g = { question: String(q.question || '').trim(), options };
+        if (other) g.other = other;
+        if (q.multi === true) g.multi = true;
+        if (Number.isInteger(q.default) && q.default >= 0 && q.default < options.length) g.default = q.default;
+        out.push(g);
+      }
     });
     return out.slice(0, 20); // wie MAX_QUESTIONS im Server
   }
@@ -367,8 +377,19 @@
     return { text, groups };
   }
 
-  // Auswahlzustand pro Nachricht: groupIndex -> Option
+  // Auswahlzustand pro Nachricht. Je Gruppe: gewählte Optionen (Set), Eingabefeld aktiv?, Eingabewert.
+  // Frage-Vertrag: { question, options[], other?, multi?, default? } – siehe server/lib/flowise.js
   let qrState = null;
+  const newSel = (g) => ({ sel: new Set(Number.isInteger(g.default) ? [g.options[g.default]] : []), otherOn: false, otherVal: '' });
+
+  function answerFor(gi) {
+    const st = qrState?.sel[gi]; const g = qrState?.groups[gi];
+    if (!st || !g) return null;
+    if (st.otherOn) { const v = st.otherVal.trim(); return v ? `${g.other}: ${v}` : null; }
+    return st.sel.size ? [...st.sel].join(', ') : null;
+  }
+  const answeredCount = () => (qrState ? qrState.groups.filter((_, gi) => answerFor(gi) !== null).length : 0);
+  const isPlainSingle = (g) => !g.multi && !g.other && !Number.isInteger(g.default);
 
   function buildGroup(g, gi) {
     const grp = document.createElement('div');
@@ -377,48 +398,90 @@
     if (g.question) {
       const label = document.createElement('div');
       label.className = 'quick-question';
-      label.textContent = g.question;
+      label.textContent = g.question + (g.multi ? ' (Mehrfachauswahl)' : '');
       grp.appendChild(label);
     }
     const row = document.createElement('div');
     row.className = 'quick-options';
+    const refresh = () => {
+      const st = qrState?.sel[gi]; if (!st) return;
+      row.querySelectorAll('.quick-reply').forEach((x) => {
+        const on = x.dataset.other === '1' ? st.otherOn : (!st.otherOn && st.sel.has(x.dataset.value));
+        x.classList.toggle('selected', on);
+      });
+      const inp = grp.querySelector('.quick-other-input');
+      if (inp) { inp.hidden = !st.otherOn; if (st.otherOn) inp.focus(); }
+      updateQrSend();
+    };
     g.options.forEach((txt) => {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'quick-reply';
       b.textContent = txt;
+      b.dataset.value = txt;
       b.addEventListener('click', () => {
         if (state.isLoading || !qrState) return;
-        if (qrState.groups.length === 1) { sendMessage(g.question ? `${g.question} → ${txt}` : txt); return; } // eine Frage → sofort
-        qrState.chosen.set(gi, txt);
-        row.querySelectorAll('.quick-reply').forEach((x) => x.classList.toggle('selected', x === b));
-        updateQrSend();
+        if (qrState.groups.length === 1 && isPlainSingle(g)) { sendMessage(g.question ? `${g.question} → ${txt}` : txt); return; } // eine einfache Frage → sofort
+        const st = qrState.sel[gi];
+        st.otherOn = false;
+        if (g.multi) { if (st.sel.has(txt)) st.sel.delete(txt); else st.sel.add(txt); }
+        else { st.sel = new Set([txt]); }
+        refresh();
       });
       row.appendChild(b);
     });
     grp.appendChild(row);
+    if (g.other) {
+      // „andere …“: Button öffnet ein Eingabefeld direkt an dieser Frage
+      const ob = document.createElement('button');
+      ob.type = 'button';
+      ob.className = 'quick-reply quick-other';
+      ob.textContent = g.other + ' …';
+      ob.dataset.other = '1';
+      ob.addEventListener('click', () => {
+        if (state.isLoading || !qrState) return;
+        const st = qrState.sel[gi];
+        st.otherOn = !st.otherOn;
+        refresh();
+      });
+      row.appendChild(ob);
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.className = 'quick-other-input';
+      inp.placeholder = g.other;
+      inp.hidden = true;
+      inp.setAttribute('aria-label', `${g.question} – ${g.other}`);
+      inp.addEventListener('input', () => { if (qrState) { qrState.sel[gi].otherVal = inp.value; updateQrSend(); } });
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); document.querySelector('.quick-send')?.click(); } });
+      grp.appendChild(inp);
+    }
+    // Vorauswahl sichtbar machen
+    setTimeout(refresh, 0);
     return grp;
   }
 
   function updateQrSend() {
     const btn = document.querySelector('.quick-send');
     if (!btn || !qrState) return;
-    btn.textContent = `Antworten senden (${qrState.chosen.size}/${qrState.groups.length})`;
-    btn.disabled = qrState.chosen.size === 0;
+    const n = answeredCount();
+    btn.textContent = `Antworten senden (${n}/${qrState.groups.length})`;
+    btn.disabled = n === 0;
   }
 
   // groups: alle Fragegruppen der Nachricht; usedInline: Indizes, die schon in der Ansicht sitzen
   function renderQuickReplies(bubbleWrap, groups, usedInline = new Set()) {
     document.querySelectorAll('.quick-replies, .quick-footer').forEach((q) => q.remove());
-    qrState = null;
     const r = state.activeResult;
     const readonly = !!r && !isOwner(r);
     if (!groups?.length || readonly || !state.activeFlow) {
       // Empfänger/kein Flow: Inline-Gruppen entschärfen
+      qrState = null;
       bubbleWrap.querySelectorAll('.quick-group .quick-reply').forEach((b) => { b.disabled = true; });
+      bubbleWrap.querySelectorAll('.quick-other-input').forEach((i) => { i.hidden = true; });
       return;
     }
-    qrState = { groups, chosen: new Map() };
+    // Zustand wurde ggf. schon von fillBotBubble (Inline-Gruppen) angelegt
+    if (!qrState || qrState.groups !== groups) qrState = { groups, sel: groups.map(newSel) };
     const rest = groups.map((g, gi) => [g, gi]).filter(([, gi]) => !usedInline.has(gi));
     if (rest.length) {
       const box = document.createElement('div');
@@ -426,7 +489,7 @@
       rest.forEach(([g, gi]) => box.appendChild(buildGroup(g, gi)));
       bubbleWrap.querySelector('.msg-bubble').parentNode.appendChild(box);
     }
-    if (groups.length > 1) {
+    if (!(groups.length === 1 && isPlainSingle(groups[0]))) {
       const footer = document.createElement('div');
       footer.className = 'quick-footer';
       const sendBtn = document.createElement('button');
@@ -434,14 +497,14 @@
       sendBtn.className = 'quick-send';
       sendBtn.disabled = true;
       sendBtn.addEventListener('click', () => {
-        if (state.isLoading || !qrState || !qrState.chosen.size) return;
-        const lines = qrState.groups.map((g, gi) => (qrState.chosen.has(gi) ? `- ${g.question || 'Auswahl'} → ${qrState.chosen.get(gi)}` : null)).filter(Boolean);
-        const open = qrState.groups.length - qrState.chosen.size;
+        if (state.isLoading || !qrState || !answeredCount()) return;
+        const lines = qrState.groups.map((g, gi) => (answerFor(gi) !== null ? `- ${g.question || 'Auswahl'} → ${answerFor(gi)}` : null)).filter(Boolean);
+        const open = qrState.groups.length - lines.length;
         sendMessage(`Meine Antworten:\n${lines.join('\n')}${open ? `\n(${open} Frage${open > 1 ? 'n' : ''} noch offen)` : ''}`);
       });
       const hint = document.createElement('div');
       hint.className = 'quick-hint';
-      hint.textContent = 'Pro Frage eine Option wählen, dann senden. Freitext geht weiterhin unten im Eingabefeld.';
+      hint.textContent = 'Pro Frage eine Option wählen (vorausgewählte passen meist), dann senden.';
       footer.appendChild(hint);
       footer.appendChild(sendBtn);
       bubbleWrap.querySelector('.msg-bubble').parentNode.appendChild(footer);
@@ -482,7 +545,7 @@
     } else {
       const detailsText = content.split(VIEW_HEAD_RE)[0].replace(TOKEN_RE, '').trim();
       const showDetails = alwaysDetails();
-      bubble.innerHTML = '<div class="msg-summary">' + renderMd(summary) + '</div>'
+      bubble.innerHTML = '<div class="msg-summary">' + renderMd(groups?.length ? summary : summary.replace(TOKEN_RE, '')) + '</div>'
         + '<button type="button" class="details-toggle">' + (showDetails ? 'Details ausblenden ▴' : 'Details einblenden ▾') + '</button>'
         + '<div class="msg-details"' + (showDetails ? '' : ' hidden') + '>' + renderMd(detailsText) + '</div>';
       const btn = bubble.querySelector('.details-toggle');
@@ -490,6 +553,7 @@
       btn.addEventListener('click', () => { det.hidden = !det.hidden; btn.textContent = det.hidden ? 'Details einblenden ▾' : 'Details ausblenden ▴'; });
       // Inline-Platzhalter durch Button-Gruppen ersetzen
       if (groups?.length) {
+        qrState = { groups, sel: groups.map(newSel) };
         const walker = document.createTreeWalker(bubble.querySelector('.msg-summary'), NodeFilter.SHOW_TEXT);
         const nodes = [];
         const hasToken = /\[\[qr:\d+\]\]/; // bewusst ohne g-Flag: test() mit g-Flag überspringt Treffer
@@ -618,6 +682,7 @@
     if (overrideText === undefined) { input.value = ''; input.style.height = 'auto'; }
     document.querySelectorAll('.quick-replies, .quick-footer').forEach((q) => q.remove());
     document.querySelectorAll('.quick-group .quick-reply').forEach((b) => { b.disabled = true; });
+    document.querySelectorAll('.quick-other-input').forEach((i) => { i.disabled = true; });
     qrState = null;
     removePdf();
     state.isLoading = true;

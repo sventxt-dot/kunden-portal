@@ -35,6 +35,16 @@ const MANY = { ...RESULT, id: '55555555-0000-4000-8000-000000000005', title: 'Zw
     summary: '### Bestellung laut Function Sheet\n' + Array.from({ length: 12 }, (_, i) => `- **Position ${i}:** Beschreibung ${i}\n[[qr:${i}]]`).join('\n') + '\n\n### Stand\n✅ 1 · ❓ 12',
     quick_replies: Array.from({ length: 12 }, (_, i) => ({ question: `Frage ${i}?`, options: ['a', 'b'] })) },
 ] } };
+const CONTRACT = { ...RESULT, id: '66666666-0000-4000-8000-000000000006', title: 'Frage-Vertrag', output_data: { chat_id: 'c6', messages: [
+  { role: 'user', content: 'x', ts: '2026-09-25T09:00:00Z' },
+  { role: 'bot', ts: '2026-09-25T09:01:00Z', content: '### ✅ 1 Artikel klar zugeordnet\n1. A → GBP Row 1 | 1 | ok\n\n## 📋 Operator-Ansicht\n\nx',
+    summary: '### Bestellung laut Function Sheet\n- **Vorspeisengabel:** laut Sheet, ohne Menge\n[[qr:0]]\n- **Fritz-Schorlen:** Sorten offen\n[[qr:1]]\n- **Bier:** zwei Sorten\n[[qr:2]]',
+    quick_replies: [
+      { question: 'Vorspeisengabel – 120 Stück, passt das?', options: ['passt (120)', '90', '150'], default: 0, other: 'andere Menge' },
+      { question: 'Fritz-Schorlen – welche Sorten?', options: ['Apfel', 'Rhabarber', 'Traube'], multi: true },
+      { question: 'Bier – wie aufteilen?', options: ['80/20 → 147 + 37', '70/30 → 129 + 55'], other: 'andere Aufteilung' },
+    ] },
+] } };
 const WITH_SUMMARY = { ...RESULT, id: '33333333-0000-4000-8000-000000000003', title: 'Mit Kurzfassung', output_data: { chat_id: 'c3', messages: [
   { role: 'user', content: 'Packliste bitte', ts: '2026-09-25T09:00:00Z' },
   { role: 'bot', ts: '2026-09-25T09:01:00Z', content: '## BLOCK 1\n| Getränk | Formel |\n|---|---|\n| Bier | 0,25 × 220 |\n\n### ✅ 3 Artikel klar zugeordnet\n1. Biertulpe → GBP Row 53 | 220 | ok\n\n## 📋 Kurzfassung\n\nValidierung fertig – 1 Frage unten per Klick.',
@@ -47,7 +57,7 @@ function makeSupabaseMock() {
     const q = { _f: {}, select() { return q; }, order() { return q; }, eq(k, v) { q._f[k] = v; return q; },
       insert(row) { q._ins = row; return q; }, single() { return q; },
       then(res) {
-        if (name === 'results') return res({ data: [RESULT, SHARED, WITH_SUMMARY, INLINE, MANY], error: null });
+        if (name === 'results') return res({ data: [RESULT, SHARED, WITH_SUMMARY, INLINE, MANY, CONTRACT], error: null });
         if (name === 'result_shares') {
           if (q._ins) { win.__shares.push({ ...q._ins, created_at: new Date().toISOString() }); return res({ data: win.__shares.at(-1), error: null }); }
           return res({ data: [...win.__shares], error: null });
@@ -83,9 +93,33 @@ before(async () => {
 
 test('Verlauf zeigt eigenes und geteiltes Ergebnis mit Badges', () => {
   const items = [...doc.querySelectorAll('.archive-item')];
-  assert.equal(items.length, 5);
+  assert.equal(items.length, 6);
   assert.ok(items.some((i) => i.textContent.includes('von Bob')), 'Badge "von Bob" fehlt');
-  assert.equal(doc.querySelectorAll('.archive-item .archive-del-btn').length, 4, 'Löschen nur bei eigenen Ergebnissen');
+  assert.equal(doc.querySelectorAll('.archive-item .archive-del-btn').length, 5, 'Löschen nur bei eigenen Ergebnissen');
+});
+
+test('Frage-Vertrag: Vorauswahl, Mehrfachauswahl und Eingabefeld direkt an der Frage', async () => {
+  [...doc.querySelectorAll('.archive-item')].find((i) => i.textContent.includes('Frage-Vertrag')).click();
+  await new Promise((r) => setTimeout(r, 10));
+  const groups = [...doc.querySelectorAll('.msg-summary .quick-group')];
+  assert.equal(groups.length, 3);
+  const send = doc.querySelector('.quick-send');
+  // Vorauswahl: „passt (120)" ist markiert, Senden sofort möglich (1/3)
+  assert.ok(groups[0].querySelector('.quick-reply').classList.contains('selected'));
+  assert.equal(send.disabled, false); assert.match(send.textContent, /1\/3/);
+  // Mehrfachauswahl
+  assert.match(groups[1].querySelector('.quick-question').textContent, /Mehrfachauswahl/);
+  const fritz = groups[1].querySelectorAll('.quick-reply'); fritz[0].click(); fritz[2].click();
+  assert.ok(fritz[0].classList.contains('selected') && fritz[2].classList.contains('selected') && !fritz[1].classList.contains('selected'));
+  // Eingabefeld an der Bier-Frage: erst versteckt, nach Klick sichtbar, leer zählt nicht
+  const inp = groups[2].querySelector('.quick-other-input'); assert.equal(inp.hidden, true);
+  groups[2].querySelector('.quick-other').click();
+  assert.equal(inp.hidden, false); assert.match(send.textContent, /2\/3/);
+  inp.value = '90/10 → 166 + 18'; inp.dispatchEvent(new win.Event('input'));
+  assert.match(send.textContent, /3\/3/);
+  const before = sent.length; send.click(); await new Promise((r) => setTimeout(r, 30));
+  assert.equal(sent.length, before + 1);
+  assert.equal(sent.at(-1).body.question, 'Meine Antworten:\n- Vorspeisengabel – 120 Stück, passt das? → passt (120)\n- Fritz-Schorlen – welche Sorten? → Apfel, Traube\n- Bier – wie aufteilen? → andere Aufteilung: 90/10 → 166 + 18');
 });
 
 test('zwölf Inline-Platzhalter mit echtem Markdown → zwölf Gruppen an den Positionen, keine am Ende', () => {

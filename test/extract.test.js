@@ -36,3 +36,20 @@ test('Obergrenze 20 Gruppen', () => {
   const { questions, text } = extractQuickReplies(many);
   assert.equal(questions.length, 20); assert.equal((text.match(/\[\[qr:/g) || []).length, 20);
 });
+
+test('Frage-Vertrag: other / multi / default bleiben erhalten, „(Freitext)“-Option wird zu other', async () => {
+  const { normalizeQuestions } = await import('../server/lib/flowise.js');
+  const out = normalizeQuestions([
+    { question: 'Bier – wie aufteilen?', options: ['80/20 → 147 + 37', '70/30 → 129 + 55', 'andere Aufteilung (Freitext)'] },
+    { question: 'Vorspeisengabel – 120 Stück, passt das?', options: ['passt (120)', '90', '150'], default: 0, other: 'andere Menge' },
+    { question: 'Fritz-Schorlen – welche Sorten?', options: ['Apfel', 'Rhabarber', 'Traube'], multi: true },
+    { question: 'Eventname „X_21.05.2026“ – passt?', options: ['passt'], default: 0, other: 'anderer Name' },
+    { question: 'ungültig', options: ['nur eine'] },
+    { question: 'default außerhalb', options: ['a', 'b'], default: 7 },
+  ]);
+  assert.deepEqual(out[0], { question: 'Bier – wie aufteilen?', options: ['80/20 → 147 + 37', '70/30 → 129 + 55'], other: 'andere Aufteilung' });
+  assert.deepEqual(out[1], { question: 'Vorspeisengabel – 120 Stück, passt das?', options: ['passt (120)', '90', '150'], other: 'andere Menge', default: 0 });
+  assert.deepEqual(out[2], { question: 'Fritz-Schorlen – welche Sorten?', options: ['Apfel', 'Rhabarber', 'Traube'], multi: true });
+  assert.deepEqual(out[3], { question: 'Eventname „X_21.05.2026“ – passt?', options: ['passt'], other: 'anderer Name', default: 0 });
+  assert.equal(out.length, 5); assert.equal(out[4].default, undefined);
+});

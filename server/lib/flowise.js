@@ -92,16 +92,30 @@ export function extractQuickReplies(text) {
   return { text: cleaned, questions };
 }
 
+// Frage-Vertrag: { question, options[], other?, multi?, default? }
+//   other   – Beschriftung eines Zusatz-Buttons, der ein Eingabefeld direkt an der Frage öffnet
+//   multi   – true: mehrere Optionen wählbar (Toggle-Buttons)
+//   default – Index der vorausgewählten Option (Ein-Klick-Bestätigung)
+// Altformat: eine Option „… (Freitext)“ wird zu `other`.
 export function normalizeQuestions(input) {
   const list = Array.isArray(input) ? input : (input && Array.isArray(input.questions) ? input.questions : (input && typeof input === 'object' ? [input] : []));
   const out = [];
   for (const q of list) {
     if (!q || typeof q !== 'object') continue;
     const question = String(q.question ?? q.frage ?? '').trim().slice(0, MAX_LEN);
-    const options = (Array.isArray(q.options) ? q.options : Array.isArray(q.optionen) ? q.optionen : [])
+    let options = (Array.isArray(q.options) ? q.options : Array.isArray(q.optionen) ? q.optionen : [])
       .map((o) => (typeof o === 'string' ? o : o?.label ?? o?.text ?? '')).map((o) => String(o).trim().slice(0, MAX_LEN)).filter(Boolean);
+    let other = typeof q.other === 'string' ? q.other.trim().slice(0, 60) : '';
+    const legacyOther = options.find((o) => /\(Freitext\)\s*$/i.test(o));
+    if (legacyOther) { options = options.filter((o) => o !== legacyOther); if (!other) other = legacyOther.replace(/\s*\(Freitext\)\s*$/i, ''); }
     const unique = [...new Set(options)].slice(0, MAX_OPTIONS);
-    if (unique.length >= 2) out.push({ question, options: unique });
+    if (unique.length >= 2 || (unique.length >= 1 && other)) {
+      const g = { question, options: unique };
+      if (other) g.other = other;
+      if (q.multi === true) g.multi = true;
+      if (Number.isInteger(q.default) && q.default >= 0 && q.default < unique.length) g.default = q.default;
+      out.push(g);
+    }
     if (out.length >= MAX_QUESTIONS) break;
   }
   return out;

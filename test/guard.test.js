@@ -1,7 +1,7 @@
 // Sicherheitsnetz: verletzende ✅-Zeilen werden nach ❓ verschoben, Zähler korrigiert, Rest unverändert.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { enforceValidation, analyseOkLine, followUpNote } from '../server/lib/validationGuard.js';
+import { enforceValidation, analyseOkLine, followUpNote, guardQuestions } from '../server/lib/validationGuard.js';
 
 const SAMPLE = `## 🔍 Validierung
 
@@ -51,8 +51,8 @@ test('enforceValidation verschiebt 5 von 8 Zeilen, nummeriert neu, korrigiert Z�
   assert.match(okBlock, /1\. Biertulpe/); assert.match(okBlock, /2\. Eiswürfel/); assert.match(okBlock, /3\. Kellnermesser/);
   assert.doesNotMatch(okBlock, /Radeberger|Clausthaler|Brotkorb|Martini|Chafilöffel/);
   const openBlock = text.split('### ❓')[1].split('### ⚠️')[0];
-  assert.match(openBlock, /3\. \[D\] \*\*Radeberger Flasche – Menge\/Row offen\?\*\*/);
-  assert.match(openBlock, /7\. \[D\] \*\*Chafilöffel – Menge\/Row offen\?\*\*/);
+  assert.match(openBlock, /3\. \[C\] \*\*Radeberger Flasche – Menge\/Zuordnung offen\?\*\*/);
+  assert.match(openBlock, /7\. \[C\] \*\*Chafilöffel – Menge\/Zuordnung offen\?\*\*/);
   assert.match(text, /🛡️ \*\*Sicherheitsnetz \(Portal\):\*\* 5 Zeilen aus ✅ nach ❓ verschoben/);
   assert.match(text, /Danach folgt der Quick-Reply-Block\./, 'Text nach dem ✅-Block bleibt erhalten');
   assert.ok(text.indexOf('### ❓') < text.indexOf('### ✅'), 'Reihenfolge ❓ vor ✅ bleibt');
@@ -87,4 +87,15 @@ test('mehrere ✅-Listen (z. B. „bereinigt") werden alle geprüft', () => {
 test('followUpNote nennt die Artikel und ist leer ohne Verschiebungen', () => {
   assert.equal(followUpNote([]), ''); assert.equal(followUpNote(undefined), '');
   assert.match(followUpNote([{ article: 'Radeberger Flasche' }, { article: 'Tonic' }]), /Radeberger Flasche, Tonic.*dürfen nicht in ✅/);
+});
+
+test('guardQuestions: klickbare Frage je verschobenem Artikel, Vorschlag nur bei eindeutiger Row + Zahl', () => {
+  const { moved } = enforceValidation(SAMPLE);
+  const qs = guardQuestions(moved);
+  assert.equal(qs.length, 5);
+  assert.deepEqual(qs[0], { question: 'Radeberger Flasche – wie weiter?', options: ['nicht in die Packliste', 'später klären'], other: 'Menge/Variante angeben' });
+  const brot = qs.find((q) => q.question.startsWith('Brotkorb'));
+  assert.deepEqual(brot.options, ['nicht in die Packliste', 'später klären'], 'mehrere Rows → kein „wie vorgeschlagen“');
+  const fk = guardQuestions([{ article: 'Flaschenkühler', line: 'Flaschenkühler Beton → Tischz. Row 6 | 1 Stück | Anzahl nach Klärung', reasons: ['offene Formulierung'] }])[0];
+  assert.deepEqual(fk, { question: 'Flaschenkühler – wie weiter?', options: ['wie vorgeschlagen übernehmen (1 Stück)', 'nicht in die Packliste', 'später klären'], other: 'andere Menge' });
 });

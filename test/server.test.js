@@ -82,6 +82,9 @@ const flowiseMock = http.createServer(async (req, res) => {
   if (/summarytest/.test(body.question)) {
     text = '## 🔍 Validierung\n\n### ❓ 1 offene Punkte\n1. [A] **Bier – Aufteilung?**\n\n### ✅ 1 Artikel klar zugeordnet\n1. Biertulpe → GBP Row 53 | 220 | ok\n\n## 📋 Kurzfassung\n\nValidierung fertig – 1 Frage unten per Klick.\n✅ 1 Artikel eindeutig zugeordnet.\n\n```quickreplies\n[{"question":"Bier – Aufteilung?","options":["70/30 → 129 + 55","andere Aufteilung (Freitext)"]}]\n```';
   }
+  if (/guardview/.test(body.question)) {
+    text = '### ❓ 1 offene Punkte\n\n1. [A] **Bier – Aufteilung?**\n\n### ✅ 2 Artikel klar zugeordnet\n\n1. Biertulpe → GBP Row 53 | 220 | ok\n2. Flaschenkühler Beton → Tischz. Row 6 | 1 Stück | Anzahl nach Klärung\n\n## 📋 Operator-Ansicht\n\n### Bestellung laut Function Sheet\n- **Bier:** zwei Sorten\n```quickreply\n{"question":"Bier – wie aufteilen?","options":["70/30 → 129 + 55"],"other":"andere Aufteilung"}\n```\n\n### Stand\n✅ 2 · ❓ 1';
+  }
   if (/guardtest/.test(body.question)) {
     text = '## 🔍 Validierung\n\n### ❓ 1 offene Punkte\n\n1. [A] **Bier – Aufteilung?** Row 69 / 71\n\n### ⚠️ 0 Annahmen\n\n🔁 V1/V2/V3-Check: 0\n\n### ✅ 3 Artikel klar zugeordnet\n\n'
       + '1. Biertulpe → GBP Row 53 | 220 | 1,0 × 220\n2. Radeberger Flasche → Getränke Row 69 | nach Klärung ❓1 | Bier\n3. Kellnermesser → Bar-I Row 7 | 1 | Wein\n\n```quickreplies\n[{"question":"Bier – Aufteilung?","options":["70/30 → 129 + 55","andere Aufteilung (Freitext)"]}]\n```';
@@ -234,13 +237,13 @@ test('Sicherheitsnetz (operativ): ✅-Zeile mit offener Menge wird nach ❓ vers
   assert.equal(r.status, 200, r.text);
   assert.match(r.json.answer, /### ✅ 2 Artikel klar zugeordnet/);
   assert.match(r.json.answer, /### ❓ 2 offene Punkte/);
-  assert.match(r.json.answer, /2\. \[D\] \*\*Radeberger Flasche – Menge\/Row offen\?\*\*/);
+  assert.match(r.json.answer, /2\. \[C\] \*\*Radeberger Flasche – Menge\/Zuordnung offen\?\*\*/);
   assert.match(r.json.answer, /🛡️ \*\*Sicherheitsnetz \(Portal\):\*\* 1 Zeile aus ✅ nach ❓ verschoben.*Radeberger Flasche/);
   const okBlock = r.json.answer.split('### ✅')[1];
   assert.doesNotMatch(okBlock, /Radeberger/);
   assert.match(okBlock, /1\. Biertulpe[\s\S]*2\. Kellnermesser/);
   assert.deepEqual(r.json.safetyNet.moved, [{ article: 'Radeberger Flasche', reasons: ['offene Formulierung'] }]);
-  assert.deepEqual(r.json.quickReplies, [{ question: 'Bier – Aufteilung?', options: ['70/30 → 129 + 55', 'andere Aufteilung (Freitext)'] }]);
+  assert.deepEqual(r.json.quickReplies, [{ question: 'Bier – Aufteilung?', options: ['70/30 → 129 + 55'], other: 'andere Aufteilung' }]);
   const last = r.json.result.output_data.messages.at(-1);
   assert.equal(last.safety_net.moved[0].article, 'Radeberger Flasche');
   assert.doesNotMatch(last.content.split('### ✅')[1], /nach Klärung ❓1/);
@@ -257,6 +260,16 @@ test('Sicherheitsnetz (operativ): ✅-Zeile mit offener Menge wird nach ❓ vers
   assert.match(k.json.answer, /nach Klärung ❓1/);
 });
 
+test('Sicherheitsnetz in der Ansicht: verschobener Artikel bekommt eine klickbare Frage unter dem Hinweis', async () => {
+  const r = await api('/api/flow/operativ', { method: 'POST', body: { question: 'guardview' }, token: tokenFor(ALICE) });
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.json.quickReplies.length, 2);
+  assert.deepEqual(r.json.quickReplies[1], { question: 'Flaschenkühler Beton – wie weiter?', options: ['wie vorgeschlagen übernehmen (1 Stück)', 'nicht in die Packliste', 'später klären'], other: 'andere Menge' });
+  assert.match(r.json.summary, /\[\[qr:0\]\]/);
+  assert.match(r.json.summary, /🛡️ Zusätzlich offen[^\n]*Flaschenkühler Beton\.\n\n\[\[qr:1\]\]$/);
+  seen.flowise.length = 0; seen.rest.length = 0;
+});
+
 test('Legacy-Client ohne X-Portal-Client: Hinweis statt Strukturdaten, Speicherung unverändert', async () => {
   const r = await api('/api/flow/operativ', { method: 'POST', body: { question: 'summarytest' }, token: tokenFor(ALICE), legacy: true });
   assert.equal(r.status, 200, r.text);
@@ -266,7 +279,7 @@ test('Legacy-Client ohne X-Portal-Client: Hinweis statt Strukturdaten, Speicheru
   assert.ok(!('quick_replies' in r.json.result.output_data.messages.at(-1)), 'keine Objekte an alten Client');
   assert.ok(!('summary' in r.json.result.output_data.messages.at(-1)));
   // in der DB (Mock) liegen die Strukturdaten trotzdem
-  assert.deepEqual(db.results.at(-1).output_data.messages.at(-1).quick_replies, [{ question: 'Bier – Aufteilung?', options: ['70/30 → 129 + 55', 'andere Aufteilung (Freitext)'] }]);
+  assert.deepEqual(db.results.at(-1).output_data.messages.at(-1).quick_replies, [{ question: 'Bier – Aufteilung?', options: ['70/30 → 129 + 55'], other: 'andere Aufteilung' }]);
   seen.flowise.length = 0; seen.rest.length = 0;
 });
 
